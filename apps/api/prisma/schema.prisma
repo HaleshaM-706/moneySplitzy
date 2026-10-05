@@ -1,0 +1,242 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  MEMBER
+  ADMIN
+}
+
+enum SplitType {
+  EQUAL
+  EXACT
+  PERCENT
+  SHARES
+}
+
+enum ExpenseStatus {
+  OPEN
+  SETTLED
+  CANCELLED
+}
+
+enum SettlementStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}
+
+enum PaymentMethodType {
+  CASH
+  UPI
+  BANK_TRANSFER
+  OTHER
+}
+
+model User {
+  id           String   @id @default(uuid())
+  name         String?
+  email        String   @unique
+  phone        String?
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  memberships  GroupMember[]
+  createdGroups Group[] @relation("creator")
+  expensesPaid Expense[] @relation("paidBy")
+  payments     ExpensePayment[]
+  expenseSplits ExpenseSplit[]
+  settlementsFrom Settlement[] @relation("fromUser")
+  settlementsTo   Settlement[] @relation("toUser")
+  notifications Notification[]
+  refreshTokens RefreshToken[]
+  idempotencyKeys IdempotencyKey[]
+
+  @@index([email])
+}
+
+model Group {
+  id          String        @id @default(uuid())
+  name        String
+  description String?
+  currency    String        @default("INR")
+  createdById String
+  createdBy   User          @relation("creator", fields: [createdById], references: [id])
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  members     GroupMember[]
+  invitations GroupInvitation[]
+  expenses    Expense[]
+  settlements Settlement[]
+
+  @@index([createdById])
+}
+
+model GroupMember {
+  id        String   @id @default(uuid())
+  groupId   String
+  group     Group    @relation(fields: [groupId], references: [id])
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  role      Role     @default(MEMBER)
+  joinedAt  DateTime @default(now())
+
+  @@unique([groupId, userId])
+  @@index([groupId])
+  @@index([userId])
+}
+
+model GroupInvitation {
+  id         String   @id @default(uuid())
+  groupId    String
+  group      Group    @relation(fields: [groupId], references: [id])
+  email      String
+  invitedBy  String
+  acceptedBy String?
+  token      String   @unique
+  expiresAt  DateTime?
+  createdAt  DateTime @default(now())
+  deletedAt  DateTime?
+
+  @@index([groupId])
+  @@index([email])
+}
+
+model Expense {
+  id           String       @id @default(uuid())
+  groupId      String
+  group        Group        @relation(fields: [groupId], references: [id])
+  description  String?
+  totalMinor   Int          // stored in minor units
+  currency     String       @default("INR")
+  splitType    SplitType
+  createdById  String
+  createdBy    User         @relation("paidBy", fields: [createdById], references: [id])
+  status       ExpenseStatus @default(OPEN)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  payments     ExpensePayment[]
+  splits       ExpenseSplit[]
+
+  @@index([groupId])
+  @@index([createdAt])
+}
+
+model ExpensePayment {
+  id         String   @id @default(uuid())
+  expenseId  String
+  expense    Expense  @relation(fields: [expenseId], references: [id])
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  amountMinor Int
+  createdAt  DateTime @default(now())
+
+  @@index([expenseId])
+  @@index([userId])
+}
+
+model ExpenseSplit {
+  id         String   @id @default(uuid())
+  expenseId  String
+  expense    Expense  @relation(fields: [expenseId], references: [id])
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  amountMinor Int
+  createdAt  DateTime @default(now())
+
+  @@unique([expenseId, userId])
+  @@index([expenseId])
+  @@index([userId])
+}
+
+model Settlement {
+  id          String   @id @default(uuid())
+  groupId     String
+  group       Group    @relation(fields: [groupId], references: [id])
+  fromUserId  String
+  fromUser    User     @relation("fromUser", fields: [fromUserId], references: [id])
+  toUserId    String
+  toUser      User     @relation("toUser", fields: [toUserId], references: [id])
+  amountMinor Int
+  currency    String   @default("INR")
+  status      SettlementStatus @default(PENDING)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  paymentMethods SettlementPaymentMethod[]
+
+  @@index([groupId])
+  @@index([fromUserId])
+  @@index([toUserId])
+}
+
+model SettlementPaymentMethod {
+  id           String   @id @default(uuid())
+  settlementId String
+  settlement   Settlement @relation(fields: [settlementId], references: [id])
+  type         PaymentMethodType
+  reference    String?
+  amountMinor  Int
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  title     String
+  body      String?
+  data      Json?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  deletedAt DateTime?
+
+  @@index([userId])
+}
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  actorUserId String?
+  entityType  String
+  entityId    String
+  action      String
+  metadata    Json?
+  createdAt   DateTime @default(now())
+
+  @@index([actorUserId])
+  @@index([entityType, entityId])
+}
+
+model RefreshToken {
+  id         String   @id @default(uuid())
+  tokenHash  String
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  createdAt  DateTime @default(now())
+  expiresAt  DateTime
+  revoked    Boolean  @default(false)
+
+  @@index([userId])
+}
+
+model IdempotencyKey {
+  id         String   @id @default(uuid())
+  key        String   @unique
+  userId     String?
+  owner      User?    @relation(fields: [userId], references: [id])
+  endpoint   String
+  requestHash String?
+  createdAt  DateTime @default(now())
+  expiresAt  DateTime?
+
+  @@index([userId])
+  @@index([endpoint])
+}
+

@@ -1,0 +1,20 @@
+openapi: 3.0.3
+info:
+  title: Money Split API
+  version: 0.1.0
+paths:
+  /auth/register:
+    post:
+      summary: Register user
+  /auth/login:
+    post:
+      summary: Login user
+  /groups:
+    post:
+      summary: Create group
+  /groups/{id}/members:
+    post:
+      summary: Invite member
+  /expenses:
+    post:
+      summary: Create expense

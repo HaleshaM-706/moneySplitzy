@@ -1,0 +1,30 @@
+{
+  "name": "money-split",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@8.8.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:api": "pnpm --filter @money-split/api dev",
+    "dev:mobile": "pnpm --filter @money-split/mobile dev",
+    "build": "pnpm -r run build",
+    "test": "pnpm -r run test",
+    "lint": "pnpm -r run lint",
+    "typecheck": "tsc -p tsconfig.base.json --noEmit",
+    "db:migrate": "pnpm --filter @money-split/api run prisma:migrate",
+    "db:seed": "pnpm --filter @money-split/api run prisma:seed",
+    "db:studio": "pnpm --filter @money-split/api run prisma:studio"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.2",
+    "eslint": "^8.40.0",
+    "prettier": "^2.8.8",
+    "eslint-config-prettier": "^8.8.0",
+    "@typescript-eslint/parser": "^5.59.0",
+    "@typescript-eslint/eslint-plugin": "^5.59.0",
+    "pnpm": "^8.8.0"
+  }
+}

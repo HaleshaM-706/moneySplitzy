@@ -1,0 +1,22 @@
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        project: [api]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+      - name: Install
+        working-directory: ./apps/${{ matrix.project }}
+        run: npm ci
+      - name: Run tests
+        working-directory: ./apps/${{ matrix.project }}
+        run: npm test --silent
