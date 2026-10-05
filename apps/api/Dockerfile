@@ -1,7 +1,7 @@
-FROM node:18
+FROM node:20
 WORKDIR /usr/src/app
 COPY package*.json ./
-RUN npm ci --production
+RUN npm ci --omit=dev
 COPY . .
 RUN npm run build
 EXPOSE 3000
