@@ -33,4 +33,4 @@ pnpm db:seed
 pnpm db:studio
 ```
 
-See individual package README files in `apps/` and `packages/` for build and run instructions.
+See individual package README files in `apps/` and `packages/` for build and run instructions
