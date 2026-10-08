@@ -239,7 +239,11 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
 
-  packages/config: {}
+  packages/config:
+    devDependencies:
+      '@types/node':
+        specifier: ^20.4.2
+        version: 20.19.43
 
   packages/shared: {}
 
@@ -248,6 +252,9 @@ importers:
       '@types/jest':
         specifier: ^29.5.3
         version: 29.5.14
+      '@types/node':
+        specifier: ^20.4.2
+        version: 20.19.43
       jest:
         specifier: ^29.6.1
         version: 29.7.0(@types/node@20.19.43)(ts-node@10.9.2)
