@@ -21,7 +21,9 @@ docker compose up -d
 # run API in dev mode
 pnpm dev:api
 
-# run mobile (Expo) in dev mode
+# configure the mobile API URL, then run Metro
+cp apps/mobile/.env.example apps/mobile/.env
+# edit apps/mobile/.env and set API_URL to a server reachable from your device
 pnpm dev:mobile
 
 # run typecheck across workspace

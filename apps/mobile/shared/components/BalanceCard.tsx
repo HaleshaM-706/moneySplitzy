@@ -1,11 +1,13 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 
-export default function BalanceCard({ title, amount }: { title: string; amount: number }) {
+export default function BalanceCard({ title, amount, currency = 'INR' }: { title: string; amount: number; currency?: string }) {
   return (
     <View style={styles.card}>
       <Text style={styles.title}>{title}</Text>
-      <Text style={styles.amount}>${Math.abs(amount) / 100}</Text>
+      <Text style={styles.amount}>
+        {new Intl.NumberFormat('en-IN', { style: 'currency', currency }).format(Math.abs(amount) / 100)}
+      </Text>
     </View>
   );
 }

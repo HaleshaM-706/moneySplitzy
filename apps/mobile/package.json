@@ -4,9 +4,10 @@
   "private": true,
   "scripts": {
     "android": "react-native run-android",
+    "dev": "react-native start --reset-cache",
     "ios": "react-native run-ios",
     "lint": "eslint .",
-    "start": "react-native start",
+    "start": "react-native start --reset-cache",
     "test": "jest"
   },
   "dependencies": {
@@ -22,6 +23,7 @@
     "react-hook-form": "^7.0.0",
     "react-native": "0.87.1",
     "react-native-safe-area-context": "^5.5.2",
+    "react-native-screens": "^4.29.0",
     "react-redux": "^9.0.0",
     "zod": "^3.0.0"
   },
@@ -33,7 +35,9 @@
     "@react-native-community/cli-platform-android": "20.2.0",
     "@react-native-community/cli-platform-ios": "20.2.0",
     "@react-native/babel-preset": "0.87.1",
+    "@react-native/codegen": "0.87.1",
     "@react-native/eslint-config": "0.87.1",
+    "@react-native/gradle-plugin": "^0.87.1",
     "@react-native/jest-preset": "0.87.1",
     "@react-native/metro-config": "0.87.1",
     "@react-native/typescript-config": "0.87.1",
@@ -45,6 +49,7 @@
     "eslint": "^8.19.0",
     "jest": "^29.6.3",
     "prettier": "2.8.8",
+    "react-native-dotenv": "^5.0.0",
     "react-test-renderer": "19.2.3",
     "redux-mock-store": "^1.0.0",
     "typescript": "^6.0.3"

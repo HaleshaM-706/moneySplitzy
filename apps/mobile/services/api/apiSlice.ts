@@ -1,28 +1,33 @@
 import { createApi } from '@reduxjs/toolkit/query/react';
 import { axiosBaseQuery } from './axiosBaseQuery';
+import { API_BASE_URL } from './apiClient';
 import type {
   UserDTO,
+  AuthResponseDTO,
   RegisterDTO,
   LoginDTO,
   GroupDTO,
+  GroupDetailsDTO,
   GroupCreateDTO,
   ExpenseDTO,
   ExpenseCreateDTO,
   BalanceDTO,
   SettlementDTO,
   DashboardSummaryDTO,
+  ActivityDTO,
+  SettlementCreateDTO,
 } from './types';
 
 export const apiSlice = createApi({
   reducerPath: 'api',
-  baseQuery: axiosBaseQuery({ baseUrl: process.env.API_URL || 'http://localhost:3000' }),
+  baseQuery: axiosBaseQuery({ baseUrl: API_BASE_URL }),
   tagTypes: ['Auth', 'Groups', 'Expenses', 'Balances', 'Settlements', 'Dashboard'],
   endpoints: builder => ({
-    register: builder.mutation<UserDTO, RegisterDTO>({
+    register: builder.mutation<AuthResponseDTO, RegisterDTO>({
       query: creds => ({ url: '/auth/register', method: 'POST', data: creds }),
       invalidatesTags: ['Auth'],
     }),
-    login: builder.mutation<{ token: string; refreshToken?: string | null; user: UserDTO }, LoginDTO>({
+    login: builder.mutation<AuthResponseDTO, LoginDTO>({
       query: creds => ({ url: '/auth/login', method: 'POST', data: creds }),
       invalidatesTags: ['Auth'],
     }),
@@ -42,7 +47,7 @@ export const apiSlice = createApi({
       query: body => ({ url: '/groups', method: 'POST', data: body }),
       invalidatesTags: ['Groups'],
     }),
-    getGroupDetails: builder.query<GroupDTO, string>({
+    getGroupDetails: builder.query<GroupDetailsDTO, string>({
       query: id => ({ url: `/groups/${id}` }),
       providesTags: ['Groups'],
     }),
@@ -58,7 +63,11 @@ export const apiSlice = createApi({
       query: ({ groupId } = {}) => ({ url: groupId ? `/dashboard/${groupId}/summary` : '/dashboard/summary' }),
       providesTags: ['Dashboard'],
     }),
-    createSettlement: builder.mutation<SettlementDTO, { payload: any; idempotencyKey?: string }>({
+    getActivity: builder.query<ActivityDTO[], void>({
+      query: () => ({ url: '/activity' }),
+      providesTags: ['Expenses'],
+    }),
+    createSettlement: builder.mutation<SettlementDTO, { payload: SettlementCreateDTO; idempotencyKey?: string }>({
       query: ({ payload, idempotencyKey }) => ({ url: '/settlements', method: 'POST', data: payload, idempotencyKey }),
       invalidatesTags: ['Settlements', 'Balances'],
     }),
@@ -76,5 +85,6 @@ export const {
   useCreateExpenseMutation,
   useGetGroupBalancesQuery,
   useGetDashboardSummaryQuery,
+  useGetActivityQuery,
   useCreateSettlementMutation,
 } = apiSlice;

@@ -1,18 +1,35 @@
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import { Text, StyleSheet, ScrollView } from 'react-native';
 import BalanceCard from '../../shared/components/BalanceCard';
 import GroupCard from '../../shared/components/GroupCard';
-import ExpenseCard from '../../shared/components/ExpenseCard';
+import LoadingIndicator from '../../shared/components/LoadingIndicator';
+import EmptyState from '../../shared/components/EmptyState';
+import { useGetDashboardSummaryQuery, useGetGroupsQuery } from '../../services/api/apiSlice';
 
 export default function DashboardScreen() {
+  const { data: summary, isLoading: summaryLoading, isError: summaryError } = useGetDashboardSummaryQuery({});
+  const { data: groups, isLoading: groupsLoading, isError: groupsError } = useGetGroupsQuery();
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={{ padding: 16 }}>
-      <BalanceCard title="You owe" amount={-1200} />
-      <BalanceCard title="You are owed" amount={3500} />
-      <Text style={styles.section}>Recent Expenses</Text>
-      <ExpenseCard title="Lunch" amount={500} />
+      {summaryLoading ? <LoadingIndicator /> : null}
+      {summaryError ? <EmptyState message="Could not load your balance summary." /> : null}
+      {summary?.balances.map(balance => (
+        <BalanceCard
+          key={balance.currency}
+          title={balance.totalBalance < 0 ? 'You owe' : 'You are owed'}
+          amount={balance.totalBalance}
+          currency={balance.currency}
+        />
+      ))}
+      {summary && summary.balances.length === 0 ? <EmptyState message="No balances yet." /> : null}
       <Text style={styles.section}>Groups</Text>
-      <GroupCard name="Weekend Trip" subtitle="3 members" />
+      {groupsLoading ? <LoadingIndicator /> : null}
+      {groupsError ? <EmptyState message="Could not load your groups." /> : null}
+      {!groupsLoading && !groupsError && groups?.length === 0 ? <EmptyState message="You are not in any groups yet." /> : null}
+      {groups?.map(group => (
+        <GroupCard key={group.id} name={group.name} subtitle={`${group.memberCount} members`} />
+      ))}
     </ScrollView>
   );
 }

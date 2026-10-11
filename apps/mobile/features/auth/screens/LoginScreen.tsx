@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Alert } from 'react-native';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -7,6 +7,7 @@ import AppTextInput from '../../../shared/components/AppTextInput';
 import PrimaryButton from '../../../shared/components/PrimaryButton';
 import { useAppDispatch } from '../../../shared/hooks/useAppHooks';
 import { setCredentials } from '../authSlice';
+import { useLoginMutation } from '../../../services/api/apiSlice';
 
 const schema = z.object({
   email: z.string().email(),
@@ -15,17 +16,19 @@ const schema = z.object({
 
 export default function LoginScreen({ navigation }: any) {
   const dispatch = useAppDispatch();
-  const { control, handleSubmit } = useForm({ resolver: zodResolver(schema) });
+  const { control, handleSubmit } = useForm<z.infer<typeof schema>>({ resolver: zodResolver(schema) });
+  const [login, { isLoading }] = useLoginMutation();
 
-  const onSubmit = (data: any) => {
-    dispatch(
-      setCredentials({
-        token: 'dev-token',
-        refreshToken: 'dev-refresh-token',
-        user: { id: 'u1', email: data.email, name: 'Demo User' },
-      }),
-    );
-    navigation.replace('Main');
+  const onSubmit = async (data: z.infer<typeof schema>) => {
+    try {
+      const result = await login(data).unwrap();
+      console.log('Login successful=====>', result);
+      dispatch(setCredentials({ token: result.access, refreshToken: result.refresh, user: result.user }));
+      navigation.replace('Main');
+    } catch (error) {
+      const message = (error as { data?: { message?: string | string[] } })?.data?.message;
+      Alert.alert('Login failed', Array.isArray(message) ? message.join('\n') : message || 'Unable to log in. Please try again.');
+    }
   };
 
   return (
@@ -47,7 +50,7 @@ export default function LoginScreen({ navigation }: any) {
           <AppTextInput placeholder="Password" secureTextEntry value={value} onChangeText={onChange} />
         )}
       />
-      <PrimaryButton title="Login" onPress={handleSubmit(onSubmit)} />
+      <PrimaryButton title={isLoading ? 'Logging in...' : 'Login'} onPress={handleSubmit(onSubmit)} disabled={isLoading} />
       <Pressable onPress={() => navigation.navigate('Register')}>
         <Text style={styles.link}>Need an account? Sign up</Text>
       </Pressable>

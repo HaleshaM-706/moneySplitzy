@@ -1,8 +1,9 @@
 import { store } from '../../app/store/store';
 import { axiosBaseQuery } from './axiosBaseQuery';
+import { API_BASE_URL } from './apiClient';
 import type { RegisterDTO, LoginDTO, GroupCreateDTO, ExpenseCreateDTO } from './types';
 
-const baseQuery = axiosBaseQuery({ baseUrl: process.env.API_URL || 'http://localhost:3000' });
+const baseQuery = axiosBaseQuery({ baseUrl: API_BASE_URL });
 
 const apiContext = {
   dispatch: store.dispatch,

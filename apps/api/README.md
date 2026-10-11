@@ -2,6 +2,11 @@
 
 Scaffolded as `@money-split/api`.
 
+The API contract, including authentication requirements, request schemas, query
+options, validation rules, and response shapes, is documented in
+[`../../docs/api/openapi.yaml`](../../docs/api/openapi.yaml). When the API is
+running, the controller-generated Swagger UI is available at `/docs`.
+
 Quick start:
 
 ```bash

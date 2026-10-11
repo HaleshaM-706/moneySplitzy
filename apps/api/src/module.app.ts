@@ -10,6 +10,9 @@ import { SettlementsModule } from './settlements/settlements.module';
 import { DebtSimplificationModule } from './debt-simplification/debt-simplification.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { ReportsModule } from './reports/reports.module';
+import { GroupsModule } from './groups/groups.module';
+import { DashboardModule } from './dashboard/dashboard.module';
+import { ActivityModule } from './activity/activity.module';
 
 @Module({
   imports: [
@@ -22,6 +25,9 @@ import { ReportsModule } from './reports/reports.module';
     DebtSimplificationModule,
     NotificationsModule,
     ReportsModule,
+    GroupsModule,
+    DashboardModule,
+    ActivityModule,
     ThrottlerModule.forRoot({ ttl: 60, limit: 120 })
   ],
   controllers: [HealthController],

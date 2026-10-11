@@ -1,20 +1,1257 @@
 openapi: 3.0.3
 info:
   title: Money Split API
-  version: 0.1.0
+  version: 0.2.0
+  description: |
+    HTTP API for accounts, groups, expenses, balances, settlements, and reports.
+    Unless a route is marked public, send `Authorization: Bearer <access>` with
+    each request. Access tokens expire after 15 minutes; refresh tokens are
+    rotated by `POST /auth/refresh`.
+servers:
+  - url: http://localhost:3000
+    description: Local API
+tags:
+  - name: Authentication
+  - name: Users
+  - name: Groups
+  - name: Expenses
+  - name: Balances and settlements
+  - name: Dashboard and activity
+  - name: Notifications
+  - name: Reports
+  - name: Health
 paths:
   /auth/register:
     post:
-      summary: Register user
+      tags: [Authentication]
+      summary: Register a user
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: User registered and token pair issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: Email is already registered
   /auth/login:
     post:
-      summary: Login user
+      tags: [Authentication]
+      summary: Log in
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: User authenticated and token pair issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /auth/refresh:
+    post:
+      tags: [Authentication]
+      summary: Rotate a refresh token
+      description: The supplied refresh token is revoked and replaced by a new token pair.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+      responses:
+        '200':
+          description: New access and refresh tokens
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenPair'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /auth/logout:
+    post:
+      tags: [Authentication]
+      summary: Revoke refresh token(s)
+      description: If `refresh` is omitted, all refresh tokens for the authenticated user are revoked.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                refresh:
+                  type: string
+                  description: Revoke only this refresh token; omit to revoke all user refresh tokens.
+      responses:
+        '201':
+          description: Tokens revoked
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok]
+                properties:
+                  ok:
+                    type: boolean
+                    example: true
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /users/me:
+    get:
+      tags: [Users]
+      summary: Get the authenticated user
+      responses:
+        '200':
+          description: Current user profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
   /groups:
+    get:
+      tags: [Groups]
+      summary: List groups the current user belongs to
+      responses:
+        '200':
+          description: Groups ordered by last update
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Group'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
     post:
-      summary: Create group
-  /groups/{id}/members:
+      tags: [Groups]
+      summary: Create a group
+      description: The authenticated user is added as an ADMIN member in the same transaction.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateGroupRequest'
+      responses:
+        '201':
+          description: Created group
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Group'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /groups/{groupId}:
+    parameters:
+      - $ref: '#/components/parameters/GroupId'
+    get:
+      tags: [Groups]
+      summary: Get group details and members
+      responses:
+        '200':
+          description: Group details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GroupDetails'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /groups/{groupId}/members:
+    parameters:
+      - $ref: '#/components/parameters/GroupId'
     post:
-      summary: Invite member
+      tags: [Groups]
+      summary: Invite a member by email
+      description: |
+        Only group ADMIN members may create invitations. The response includes
+        a single-use token that must be delivered to the invited user. Invitations
+        expire after seven days.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InviteMemberRequest'
+      responses:
+        '201':
+          description: Invitation created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GroupInvitation'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /groups/{groupId}/invitations:
+    parameters:
+      - $ref: '#/components/parameters/GroupId'
+    post:
+      tags: [Groups]
+      summary: Create a group invitation
+      description: Same operation as `POST /groups/{groupId}/members`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InviteMemberRequest'
+      responses:
+        '201':
+          description: Invitation created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GroupInvitation'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /groups/invitations/{token}/accept:
+    post:
+      tags: [Groups]
+      summary: Accept an invitation
+      description: The authenticated account email must match the invitation email.
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '201':
+          description: User joined the group
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [groupId, joined]
+                properties:
+                  groupId:
+                    type: string
+                    format: uuid
+                  joined:
+                    type: boolean
+                    example: true
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /groups/{groupId}/expenses:
+    parameters:
+      - $ref: '#/components/parameters/GroupId'
+    get:
+      tags: [Expenses]
+      summary: List group expenses
+      responses:
+        '200':
+          description: Expenses newest first; cancelled expenses are excluded
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Expense'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      tags: [Expenses]
+      summary: Create a group expense
+      description: |
+        All amounts are integer minor units (for example, paise). Payment
+        allocations and split allocations must each sum exactly to `totalMinor`.
+        Each user may appear once per allocation array and must be a group
+        member. `splitType` identifies how the shares were derived; `splits`
+        contains the final per-user integer amounts, not percentages or share
+        weights. Expense currency must match the group's currency. An optional
+        `Idempotency-Key` header prevents duplicate writes.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateExpenseRequest'
+      responses:
+        '201':
+          description: Expense with payment and split allocations
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Expense'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Idempotency key was already used
+  /groups/{groupId}/expenses/{expenseId}:
+    parameters:
+      - $ref: '#/components/parameters/GroupId'
+      - name: expenseId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [Expenses]
+      summary: Get one group expense
+      responses:
+        '200':
+          description: Expense with allocation details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Expense'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /expenses:
     post:
-      summary: Create expense
+      tags: [Expenses]
+      summary: Create an expense using groupId in the request body
+      description: Compatibility route equivalent to `POST /groups/{groupId}/expenses`.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/CreateExpenseRequest'
+                - type: object
+                  required: [groupId]
+                  properties:
+                    groupId:
+                      type: string
+                      format: uuid
+      responses:
+        '201':
+          description: Expense with payment and split allocations
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Expense'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Idempotency key was already used
+  /groups/{groupId}/balances:
+    parameters:
+      - $ref: '#/components/parameters/GroupId'
+    get:
+      tags: [Balances and settlements]
+      summary: Calculate group member balances
+      description: Balances are derived from payments, splits, and completed settlements.
+      responses:
+        '200':
+          description: One balance row per group member
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Balance'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /settlements:
+    post:
+      tags: [Balances and settlements]
+      summary: Create a completed settlement
+      description: |
+        `fromUserId` must be the authenticated user. Both parties must belong
+        to the group. Amounts are integer minor units. An optional
+        `Idempotency-Key` header prevents duplicate writes.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSettlementRequest'
+      responses:
+        '201':
+          description: Created settlement
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Settlement'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Idempotency key was already used
+  /groups/{groupId}/settlements:
+    parameters:
+      - $ref: '#/components/parameters/GroupId'
+    get:
+      tags: [Balances and settlements]
+      summary: List group settlements
+      responses:
+        '200':
+          description: Settlements newest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Settlement'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /settlements/{settlementId}:
+    get:
+      tags: [Balances and settlements]
+      summary: Get a settlement
+      parameters:
+        - name: settlementId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Settlement
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Settlement'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /groups/{groupId}/debts/simplified:
+    parameters:
+      - $ref: '#/components/parameters/GroupId'
+    get:
+      tags: [Balances and settlements]
+      summary: Get suggested transfers that settle net group balances
+      responses:
+        '200':
+          description: Suggested debtor-to-creditor transfers; this operation does not create settlements
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SimplifiedDebt'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /dashboard/summary:
+    get:
+      tags: [Dashboard and activity]
+      summary: Get the current user's dashboard totals
+      responses:
+        '200':
+          description: Group count and aggregate balances by currency
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardSummary'
+  /dashboard/{groupId}/summary:
+    get:
+      tags: [Dashboard and activity]
+      summary: Get dashboard totals for one group
+      parameters:
+        - $ref: '#/components/parameters/GroupId'
+      responses:
+        '200':
+          description: Group count and balances by currency
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardSummary'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /activity:
+    get:
+      tags: [Dashboard and activity]
+      summary: List recent group expenses as activity
+      description: Returns up to 50 recent expenses in groups the current user belongs to.
+      responses:
+        '200':
+          description: Recent activity rows
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Activity'
+  /notifications:
+    get:
+      tags: [Notifications]
+      summary: List the authenticated user's notifications
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Non-deleted notifications, newest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Notification'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /notifications/{notificationId}/read:
+    patch:
+      tags: [Notifications]
+      summary: Mark one of the authenticated user's notifications as read
+      parameters:
+        - name: notificationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Notification marked read
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, read]
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  read:
+                    type: boolean
+                    example: true
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /reports/monthly-spending:
+    get:
+      tags: [Reports]
+      summary: Get the current user's monthly spending
+      parameters:
+        - $ref: '#/components/parameters/Year'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Monthly totals ordered newest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MonthlySpending'
+  /reports/me/spending:
+    get:
+      tags: [Reports]
+      summary: List the current user's expenses over a date range
+      parameters:
+        - $ref: '#/components/parameters/From'
+        - $ref: '#/components/parameters/To'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: User expenses newest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Expense'
+  /reports/history:
+    get:
+      tags: [Reports]
+      summary: Search the current user's expense history
+      parameters:
+        - name: q
+          in: query
+          description: Case-insensitive substring match against expense description
+          schema:
+            type: string
+            maxLength: 200
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Matching expenses newest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Expense'
+  /groups/{groupId}/reports/monthly-spending:
+    parameters:
+      - $ref: '#/components/parameters/GroupId'
+    get:
+      tags: [Reports]
+      summary: Get group monthly spending
+      parameters:
+        - $ref: '#/components/parameters/Year'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Monthly totals ordered newest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MonthlySpending'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /groups/{groupId}/reports/spending:
+    parameters:
+      - $ref: '#/components/parameters/GroupId'
+    get:
+      tags: [Reports]
+      summary: List group expenses within a date range
+      parameters:
+        - $ref: '#/components/parameters/From'
+        - $ref: '#/components/parameters/To'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Group expenses newest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Expense'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /groups/{groupId}/reports/categories:
+    parameters:
+      - $ref: '#/components/parameters/GroupId'
+    get:
+      tags: [Reports]
+      summary: Find expenses by category-like description text
+      description: Expense currently has no category database field; `category` is matched against description case-insensitively.
+      parameters:
+        - name: category
+          in: query
+          schema:
+            type: string
+            maxLength: 100
+        - $ref: '#/components/parameters/From'
+        - $ref: '#/components/parameters/To'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Matching expenses newest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Expense'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /groups/{groupId}/reports/history:
+    parameters:
+      - $ref: '#/components/parameters/GroupId'
+    get:
+      tags: [Reports]
+      summary: Search group expense history
+      parameters:
+        - name: q
+          in: query
+          description: Case-insensitive substring match against expense description
+          schema:
+            type: string
+            maxLength: 200
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Matching expenses newest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Expense'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /health/live:
+    get:
+      tags: [Health]
+      summary: Check that the API process is alive
+      security: []
+      responses:
+        '200':
+          description: Process is responding
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+  /health/ready:
+    get:
+      tags: [Health]
+      summary: Check API readiness
+      security: []
+      description: Current implementation reports readiness but does not probe database connectivity.
+      responses:
+        '200':
+          description: API reports ready
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    GroupId:
+      name: groupId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: Unique key for this mutation; reusing a key returns HTTP 409.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 200
+    From:
+      name: from
+      in: query
+      description: Inclusive start timestamp in RFC 3339 format
+      schema:
+        type: string
+        format: date-time
+    To:
+      name: to
+      in: query
+      description: Exclusive end timestamp in RFC 3339 format
+      schema:
+        type: string
+        format: date-time
+    Year:
+      name: year
+      in: query
+      schema:
+        type: integer
+        minimum: 2000
+        maximum: 2100
+    Page:
+      name: page
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    PageSize:
+      name: pageSize
+      in: query
+      description: Maximum rows per page; values over 200 are rejected.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 50
+  responses:
+    BadRequest:
+      description: Invalid request body or query parameter
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unauthorized:
+      description: Missing, invalid, or expired authentication credentials
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Forbidden:
+      description: Authenticated user is not allowed to perform this operation
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: Resource not found or inaccessible to the current user
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+  schemas:
+    RegisterRequest:
+      type: object
+      additionalProperties: false
+      required: [name, email, password]
+      properties:
+        name:
+          type: string
+          minLength: 3
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 8
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 1
+    RefreshRequest:
+      type: object
+      additionalProperties: false
+      required: [userId, refresh]
+      properties:
+        userId:
+          type: string
+          format: uuid
+        refresh:
+          type: string
+    TokenPair:
+      type: object
+      required: [access, refresh]
+      properties:
+        access:
+          type: string
+          description: Short-lived JWT access token
+        refresh:
+          type: string
+          description: Opaque rotating refresh token
+    AuthResponse:
+      allOf:
+        - $ref: '#/components/schemas/TokenPair'
+        - type: object
+          required: [user]
+          properties:
+            user:
+              $ref: '#/components/schemas/User'
+    User:
+      type: object
+      required: [id, email]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          nullable: true
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+          nullable: true
+    CreateGroupRequest:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        description:
+          type: string
+          maxLength: 1000
+        currency:
+          type: string
+    Notification:
+      type: object
+      required: [id, userId, title, read, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        title:
+          type: string
+        body:
+          type: string
+          nullable: true
+        data:
+          type: object
+          nullable: true
+          additionalProperties: true
+        read:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+          minLength: 3
+          maxLength: 3
+          pattern: '^[A-Z]{3}$'
+          default: INR
+          description: Three-letter currency code
+    Group:
+      type: object
+      required: [id, name, currency, memberCount]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        currency:
+          type: string
+          example: INR
+        createdById:
+          type: string
+          format: uuid
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        memberCount:
+          type: integer
+          minimum: 1
+    GroupDetails:
+      allOf:
+        - $ref: '#/components/schemas/Group'
+        - type: object
+          properties:
+            members:
+              type: array
+              items:
+                type: object
+                required: [id, role, user]
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  role:
+                    type: string
+                    enum: [ADMIN, MEMBER]
+                  user:
+                    $ref: '#/components/schemas/User'
+    InviteMemberRequest:
+      type: object
+      additionalProperties: false
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+    GroupInvitation:
+      type: object
+      required: [id, groupId, email, token, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        groupId:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        token:
+          type: string
+          format: uuid
+          description: Deliver to the invitee; do not expose in public group listings.
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+    ExpenseAllocation:
+      type: object
+      additionalProperties: false
+      required: [userId, amountMinor]
+      properties:
+        userId:
+          type: string
+          format: uuid
+        amountMinor:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+          description: Amount in minor currency units
+    CreateExpenseRequest:
+      type: object
+      required: [totalMinor, splitType, payments, splits]
+      properties:
+        description:
+          type: string
+          maxLength: 500
+        totalMinor:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+          description: Total amount in minor currency units
+        currency:
+          type: string
+          minLength: 3
+          maxLength: 3
+          pattern: '^[A-Z]{3}$'
+          description: Must match the group's currency; omitted values default to it
+        splitType:
+          type: string
+          enum: [EQUAL, EXACT, PERCENT, SHARES]
+        payments:
+          type: array
+          minItems: 1
+          description: Payers and paid amounts; unique userId values; amounts must sum to totalMinor.
+          items:
+            $ref: '#/components/schemas/ExpenseAllocation'
+        splits:
+          type: array
+          minItems: 1
+          description: Participants and owed amounts; unique userId values; amounts must sum to totalMinor.
+          items:
+            $ref: '#/components/schemas/ExpenseAllocation'
+    Expense:
+      type: object
+      required: [id, groupId, totalMinor, currency, splitType, createdById, status, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        groupId:
+          type: string
+          format: uuid
+        description:
+          type: string
+          nullable: true
+        totalMinor:
+          type: integer
+          minimum: 1
+        currency:
+          type: string
+        splitType:
+          type: string
+          enum: [EQUAL, EXACT, PERCENT, SHARES]
+        createdById:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [OPEN, SETTLED, CANCELLED]
+        createdAt:
+          type: string
+          format: date-time
+        payments:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExpenseAllocation'
+        splits:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExpenseAllocation'
+    Balance:
+      type: object
+      required: [userId, paidMinor, owesMinor, settlementsSentMinor, settlementsReceivedMinor, netMinor, currency]
+      properties:
+        userId:
+          type: string
+          format: uuid
+        paidMinor:
+          type: integer
+        owesMinor:
+          type: integer
+        settlementsSentMinor:
+          type: integer
+        settlementsReceivedMinor:
+          type: integer
+        netMinor:
+          type: integer
+          description: paidMinor - owesMinor + settlementsSentMinor - settlementsReceivedMinor
+        currency:
+          type: string
+    CreateSettlementRequest:
+      type: object
+      additionalProperties: false
+      required: [groupId, fromUserId, toUserId, amountMinor]
+      properties:
+        groupId:
+          type: string
+          format: uuid
+        fromUserId:
+          type: string
+          format: uuid
+          description: Must be the authenticated user's id.
+        toUserId:
+          type: string
+          format: uuid
+        amountMinor:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+        currency:
+          type: string
+          minLength: 3
+          maxLength: 3
+          pattern: '^[A-Z]{3}$'
+          description: Must match the group's currency; omitted values default to it
+    Settlement:
+      type: object
+      required: [id, groupId, fromUserId, toUserId, amountMinor, currency, status, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        groupId:
+          type: string
+          format: uuid
+        fromUserId:
+          type: string
+          format: uuid
+        toUserId:
+          type: string
+          format: uuid
+        amountMinor:
+          type: integer
+        currency:
+          type: string
+        status:
+          type: string
+          enum: [PENDING, COMPLETED, FAILED]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    SimplifiedDebt:
+      type: object
+      required: [fromUserId, toUserId, amountMinor, currency]
+      properties:
+        fromUserId:
+          type: string
+          format: uuid
+        toUserId:
+          type: string
+          format: uuid
+        amountMinor:
+          type: integer
+          minimum: 1
+        currency:
+          type: string
+    DashboardSummary:
+      type: object
+      required: [groupsCount, balances]
+      properties:
+        groupsCount:
+          type: integer
+          minimum: 0
+        balances:
+          type: array
+          items:
+            type: object
+            required: [currency, totalBalance]
+            properties:
+              currency:
+                type: string
+              totalBalance:
+                type: integer
+                description: Net total in minor units
+    Activity:
+      type: object
+      required: [id, title, amount, payerId, createdAt, groupName, currency]
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        amount:
+          type: integer
+          description: Amount in minor currency units
+        payerId:
+          type: string
+          format: uuid
+        paidBy:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        groupName:
+          type: string
+        currency:
+          type: string
+    MonthlySpending:
+      type: object
+      required: [month, currency, total_minor]
+      properties:
+        month:
+          type: string
+          format: date-time
+        currency:
+          type: string
+        total_minor:
+          type: integer
+          format: int64
+          description: Aggregate amount in minor currency units
+    Health:
+      type: object
+      required: [status, time]
+      properties:
+        status:
+          type: string
+          enum: [ok, ready]
+        time:
+          type: string
+          format: date-time
+    Error:
+      type: object
+      properties:
+        statusCode:
+          type: integer
+        message:
+          oneOf:
+            - type: string
+            - type: array
+              items:
+                type: string
+        error:
+          type: string
+security:
+  - bearerAuth: []

@@ -1,10 +1,11 @@
 import React from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Alert } from 'react-native';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import AppTextInput from '../../../shared/components/AppTextInput';
 import PrimaryButton from '../../../shared/components/PrimaryButton';
+import { useRegisterMutation } from '../../../services/api/apiSlice';
 
 const schema = z.object({
   name: z.string().min(1),
@@ -14,10 +15,20 @@ const schema = z.object({
 
 export default function RegisterScreen({ navigation }: any) {
   const { control, handleSubmit } = useForm({ resolver: zodResolver(schema) });
+  const [register, { isLoading }] = useRegisterMutation();
 
-  const onSubmit = (data: any) => {
-    console.log('register', data);
-    navigation.replace('Login');
+  const onSubmit = async (data: any) => {
+    try {
+      await register({
+        name: data.name,
+        email: data.email,
+        password: data.password,
+      }).unwrap();
+
+      navigation.replace('Login');
+    } catch (error: any) {
+      Alert.alert('Registration failed', error?.data?.message || 'Unable to create account. Please try again.');
+    }
   };
 
   return (
@@ -45,7 +56,7 @@ export default function RegisterScreen({ navigation }: any) {
           <AppTextInput placeholder="Password" secureTextEntry value={value} onChangeText={onChange} />
         )}
       />
-      <PrimaryButton title="Register" onPress={handleSubmit(onSubmit)} />
+      <PrimaryButton title={isLoading ? 'Registering...' : 'Register'} onPress={handleSubmit(onSubmit)} disabled={isLoading} />
       <Pressable onPress={() => navigation.goBack()}>
         <Text style={styles.link}>Already have an account? Log in</Text>
       </Pressable>

@@ -1,4 +1,5 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../common/prisma.service';
 import { UsersService } from '../users/users.service';
 import * as argon2 from 'argon2';
@@ -11,8 +12,15 @@ export class AuthService {
 
   async register(email: string, name: string, password: string) {
     const passwordHash = await argon2.hash(password);
-    const user = await this.users.create(email, name, passwordHash);
-    return { id: user.id, email: user.email, name: user.name };
+    try {
+      const user = await this.users.create(email, name, passwordHash);
+      return { id: user.id, email: user.email, name: user.name };
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw new ConflictException('Email is already registered');
+      }
+      throw error;
+    }
   }
 
   async validateUser(email: string, password: string) {

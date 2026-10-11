@@ -18,17 +18,18 @@ let refreshingPromise: Promise<string | null> | null = null;
 const refreshToken = async (getState: () => RootState, dispatch: any) => {
   const state = getState();
   const current = state.auth;
-  if (!current?.refreshToken) return null;
+  const user = current?.user;
+  if (!current?.refreshToken || !user?.id) return null;
 
   if (refreshingPromise) return refreshingPromise;
 
   refreshingPromise = (async () => {
     try {
-      const resp = await bareClient.post('/auth/refreshToken', { refreshToken: current.refreshToken });
+      const resp = await bareClient.post('/auth/refresh', { userId: user.id, refresh: current.refreshToken });
       const data = resp.data;
-      if (data?.token) {
-        dispatch(setCredentials({ token: data.token, refreshToken: data.refreshToken ?? null, user: data.user ?? null }));
-        return data.token as string;
+      if (data?.access) {
+        dispatch(setCredentials({ token: data.access, refreshToken: data.refresh ?? null, user }));
+        return data.access as string;
       }
       dispatch(clearCredentials());
       return null;
