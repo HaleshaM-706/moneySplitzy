@@ -9,6 +9,8 @@ import type {
   GroupDTO,
   GroupDetailsDTO,
   GroupCreateDTO,
+  GroupInvitationDTO,
+  AcceptGroupInvitationDTO,
   ExpenseDTO,
   ExpenseCreateDTO,
   BalanceDTO,
@@ -51,6 +53,17 @@ export const apiSlice = createApi({
       query: id => ({ url: `/groups/${id}` }),
       providesTags: ['Groups'],
     }),
+    inviteGroupMember: builder.mutation<GroupInvitationDTO, { groupId: string; email: string }>({
+      query: ({ groupId, email }) => ({
+        url: `/groups/${groupId}/invitations`,
+        method: 'POST',
+        data: { email },
+      }),
+    }),
+    acceptGroupInvitation: builder.mutation<AcceptGroupInvitationDTO, string>({
+      query: token => ({ url: `/groups/invitations/${token}/accept`, method: 'POST' }),
+      invalidatesTags: ['Groups'],
+    }),
     createExpense: builder.mutation<ExpenseDTO, { groupId: string; expense: ExpenseCreateDTO; idempotencyKey?: string }>({
       query: ({ groupId, expense, idempotencyKey }) => ({ url: `/groups/${groupId}/expenses`, method: 'POST', data: expense, idempotencyKey }),
       invalidatesTags: ['Expenses', 'Balances'],
@@ -82,6 +95,8 @@ export const {
   useGetGroupsQuery,
   useCreateGroupMutation,
   useGetGroupDetailsQuery,
+  useInviteGroupMemberMutation,
+  useAcceptGroupInvitationMutation,
   useCreateExpenseMutation,
   useGetGroupBalancesQuery,
   useGetDashboardSummaryQuery,

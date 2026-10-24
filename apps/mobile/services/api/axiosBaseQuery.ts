@@ -67,6 +67,14 @@ export const axiosBaseQuery = ({ baseUrl }: { baseUrl: string } = { baseUrl: '' 
     } catch (error) {
       const axiosError = error as AxiosError;
       if (!axiosError.response) {
+        if (axiosError.code === 'ECONNABORTED' || axiosError.code === 'ETIMEDOUT') {
+          return {
+            error: {
+              status: 'TIMEOUT_ERROR',
+              data: 'The API took too long to respond. If the server was waking up, please try again.',
+            },
+          } as any;
+        }
         return { error: { status: 'FETCH_ERROR', data: axiosError.message } } as any;
       }
 

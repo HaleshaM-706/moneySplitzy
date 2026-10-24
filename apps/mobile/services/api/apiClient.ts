@@ -10,10 +10,10 @@ export const API_BASE_URL = apiBaseUrl;
 
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 15000,
+  timeout: 60000,
 });
 
 export const bareClient = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 15000,
+  timeout: 60000,
 });

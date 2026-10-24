@@ -46,6 +46,20 @@ export type GroupCreateDTO = {
   currency?: string;
 };
 
+export type GroupInvitationDTO = {
+  id: string;
+  groupId: string;
+  email: string;
+  token: string;
+  expiresAt?: string | null;
+  createdAt: string;
+};
+
+export type AcceptGroupInvitationDTO = {
+  groupId: string;
+  joined: boolean;
+};
+
 export type ExpenseDTO = {
   id: string;
   groupId: string;
