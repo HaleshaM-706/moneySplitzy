@@ -7,9 +7,25 @@ type Props = {
   name: string;
   subtitle: string;
   onPress?: () => void;
+  icon?: string;
+  totalMinor?: number;
+  netMinor?: number;
+  currency?: string;
+  recentActivity?: string;
+  lastActivityAt?: string;
 };
 
-export default function GroupCard({ name, subtitle, onPress }: Props) {
+export default function GroupCard({
+  name,
+  subtitle,
+  onPress,
+  icon,
+  totalMinor,
+  netMinor,
+  currency = 'INR',
+  recentActivity,
+  lastActivityAt,
+}: Props) {
   return (
     <Pressable
       accessibilityRole={onPress ? 'button' : undefined}
@@ -17,11 +33,27 @@ export default function GroupCard({ name, subtitle, onPress }: Props) {
       style={({ pressed }) => [styles.card, pressed && onPress ? styles.pressed : null]}
     >
       <View style={styles.iconWrap}>
-        <Users size={19} color={colors.primaryDark} strokeWidth={1.9} />
+        {icon ? <Text style={styles.emoji}>{icon}</Text> : <Users size={19} color={colors.primaryDark} strokeWidth={1.9} />}
       </View>
       <View style={styles.copy}>
         <Text style={styles.name}>{name}</Text>
         <Text style={styles.subtitle}>{subtitle}</Text>
+        {recentActivity ? <Text style={styles.activity}>{recentActivity} · {lastActivityAt ? new Date(lastActivityAt).toLocaleDateString() : 'Recently'}</Text> : null}
+        {typeof totalMinor === 'number' || typeof netMinor === 'number' ? (
+          <View style={styles.summary}>
+            {typeof totalMinor === 'number' ? (
+              <Text style={styles.summaryText}>
+                Total {new Intl.NumberFormat('en-IN', { style: 'currency', currency, maximumFractionDigits: 0 }).format(totalMinor / 100)}
+              </Text>
+            ) : null}
+            {typeof netMinor === 'number' ? (
+              <Text style={[styles.summaryText, netMinor < 0 && styles.negative]}>
+                {netMinor === 0 ? 'Settled up' : netMinor > 0 ? 'You are owed ' : 'You owe '}
+                {netMinor === 0 ? '' : new Intl.NumberFormat('en-IN', { style: 'currency', currency, maximumFractionDigits: 0 }).format(Math.abs(netMinor) / 100)}
+              </Text>
+            ) : null}
+          </View>
+        ) : null}
       </View>
       <ChevronRight size={19} color="#A4AEA8" />
     </Pressable>
@@ -51,4 +83,9 @@ const styles = StyleSheet.create({
   copy: { flex: 1, marginHorizontal: 12 },
   name: { color: colors.text, fontSize: 15, fontWeight: '700', marginBottom: 4 },
   subtitle: { color: colors.muted, fontSize: 13 },
+  activity: { color: colors.muted, fontSize: 11, marginTop: 5 },
+  emoji: { fontSize: 23 },
+  summary: { marginTop: 7, gap: 3 },
+  summaryText: { color: colors.primaryDark, fontSize: 12, fontWeight: '700' },
+  negative: { color: colors.danger },
 });

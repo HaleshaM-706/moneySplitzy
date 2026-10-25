@@ -1,7 +1,7 @@
 import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Activity as ActivityIcon, Home, UserRound, Users } from 'lucide-react-native';
+import { Activity as ActivityIcon, UserRound, Users, Wallet } from 'lucide-react-native';
 import type { NavigatorScreenParams } from '@react-navigation/native';
 import SplashScreen from '../../features/auth/screens/SplashScreen';
 import LoginScreen from '../../features/auth/screens/LoginScreen';
@@ -17,7 +17,7 @@ import ActivityScreen from '../../features/activity/ActivityScreen';
 import ProfileScreen from '../../features/profile/ProfileScreen';
 
 type MainTabParamList = {
-  Home: undefined;
+  Balances: undefined;
   Groups: undefined;
   Activity: undefined;
   Profile: undefined;
@@ -40,8 +40,8 @@ const Tab = createBottomTabNavigator();
 
 type TabIconProps = { color: string; size: number };
 
-function HomeTabIcon({ color, size }: TabIconProps) {
-  return <Home color={color} size={size} strokeWidth={2.2} />;
+function BalancesTabIcon({ color, size }: TabIconProps) {
+  return <Wallet color={color} size={size} strokeWidth={2.2} />;
 }
 
 function GroupsTabIcon({ color, size }: TabIconProps) {
@@ -59,6 +59,7 @@ function ProfileTabIcon({ color, size }: TabIconProps) {
 function MainTabs() {
   return (
     <Tab.Navigator
+      initialRouteName="Groups"
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: '#167A4A',
@@ -77,11 +78,6 @@ function MainTabs() {
       }}
     >
       <Tab.Screen
-        name="Home"
-        component={DashboardScreen}
-        options={{ tabBarIcon: HomeTabIcon }}
-      />
-      <Tab.Screen
         name="Groups"
         component={GroupsScreen}
         options={{ tabBarIcon: GroupsTabIcon }}
@@ -90,6 +86,11 @@ function MainTabs() {
         name="Activity"
         component={ActivityScreen}
         options={{ tabBarIcon: ActivityTabIcon }}
+      />
+      <Tab.Screen
+        name="Balances"
+        component={DashboardScreen}
+        options={{ tabBarIcon: BalancesTabIcon }}
       />
       <Tab.Screen
         name="Profile"

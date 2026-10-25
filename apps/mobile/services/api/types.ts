@@ -30,6 +30,12 @@ export type GroupDTO = {
   createdAt?: string;
   updatedAt?: string;
   memberCount: number;
+  category?: string;
+  icon?: string;
+  totalMinor?: number;
+  netMinor?: number;
+  recentActivity?: string;
+  lastActivityAt?: string;
 };
 
 export type GroupDetailsDTO = GroupDTO & {
@@ -44,6 +50,8 @@ export type GroupCreateDTO = {
   name: string;
   description?: string;
   currency?: string;
+  category?: string;
+  icon?: string;
 };
 
 export type GroupInvitationDTO = {
@@ -55,6 +63,12 @@ export type GroupInvitationDTO = {
   createdAt: string;
 };
 
+export type AddExistingGroupMemberDTO = {
+  groupId: string;
+  userId: string;
+  added: boolean;
+};
+
 export type AcceptGroupInvitationDTO = {
   groupId: string;
   joined: boolean;
@@ -64,6 +78,9 @@ export type ExpenseDTO = {
   id: string;
   groupId: string;
   description?: string | null;
+  category?: string;
+  notes?: string | null;
+  expenseDate?: string;
   totalMinor: number;
   currency: string;
   splitType: 'EQUAL' | 'EXACT' | 'PERCENT' | 'SHARES';
@@ -76,6 +93,9 @@ export type ExpenseDTO = {
 
 export type ExpenseCreateDTO = {
   description?: string;
+  category?: string;
+  notes?: string;
+  expenseDate?: string;
   totalMinor: number;
   currency?: string;
   splitType: 'EQUAL' | 'EXACT' | 'PERCENT' | 'SHARES';
@@ -139,4 +159,16 @@ export type ActivityDTO = {
   groupName: string;
   currency: string;
   paidBy?: string;
+};
+
+export type GroupActivityDTO = {
+  id: string;
+  type: 'EXPENSE' | 'SETTLEMENT' | 'MEMBER';
+  title: string;
+  action: string;
+  amountMinor: number;
+  actorId: string;
+  actor: string;
+  createdAt: string;
+  currency: string;
 };

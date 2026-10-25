@@ -22,6 +22,7 @@ import {
   Max,
   IsString,
   IsUUID,
+  IsDateString,
   MaxLength,
   Matches,
   Min,
@@ -45,6 +46,20 @@ class CreateExpenseDto {
   @IsString()
   @MaxLength(500)
   description?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  category?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  notes?: string;
+
+  @IsOptional()
+  @IsDateString()
+  expenseDate?: string;
 
   @IsInt()
   @Min(1)
@@ -133,6 +148,9 @@ export class ExpensesController {
           data: {
             groupId,
             description: body.description,
+            category: body.category ?? 'OTHER',
+            notes: body.notes,
+            expenseDate: body.expenseDate ? new Date(body.expenseDate) : undefined,
             totalMinor: body.totalMinor,
             currency: body.currency ?? member.group.currency,
             splitType: body.splitType,

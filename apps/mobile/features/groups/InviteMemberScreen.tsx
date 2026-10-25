@@ -1,8 +1,13 @@
 import React, { useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
-import { MailPlus, UserPlus } from 'lucide-react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { MailPlus, UserPlus, UserRoundPlus } from 'lucide-react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { useGetCurrentUserQuery, useGetGroupDetailsQuery, useInviteGroupMemberMutation } from '../../services/api/apiSlice';
+import {
+  useAddExistingGroupMemberMutation,
+  useGetCurrentUserQuery,
+  useGetGroupDetailsQuery,
+  useInviteGroupMemberMutation,
+} from '../../services/api/apiSlice';
 import AppTextInput from '../../shared/components/AppTextInput';
 import BackButton from '../../shared/components/BackButton';
 import EmptyState from '../../shared/components/EmptyState';
@@ -17,11 +22,21 @@ type Props = NativeStackScreenProps<RootStackParamList, 'InviteMember'>;
 export default function InviteMemberScreen({ route, navigation }: Props) {
   const { data: group, isLoading: groupLoading, isError: groupError } = useGetGroupDetailsQuery(route.params.groupId);
   const { data: user, isLoading: userLoading, isError: userError } = useGetCurrentUserQuery();
-  const [invite, { data: invitation, isLoading: inviting }] = useInviteGroupMemberMutation();
+  const [invite, { data: invitation, isLoading: inviting, reset: resetInvitation }] = useInviteGroupMemberMutation();
+  const [addExistingMember, { data: addedMember, isLoading: adding, reset: resetAddedMember }] =
+    useAddExistingGroupMemberMutation();
   const [email, setEmail] = useState('');
   const [formError, setFormError] = useState('');
+  const [mode, setMode] = useState<'existing' | 'invite'>('existing');
 
   const isAdmin = group?.members.some(member => member.user.id === user?.id && member.role === 'ADMIN') ?? false;
+
+  const selectMode = (nextMode: 'existing' | 'invite') => {
+    setMode(nextMode);
+    setFormError('');
+    resetInvitation();
+    resetAddedMember();
+  };
 
   const submit = async () => {
     const normalizedEmail = email.trim().toLowerCase();
@@ -32,9 +47,15 @@ export default function InviteMemberScreen({ route, navigation }: Props) {
 
     setFormError('');
     try {
-      await invite({ groupId: route.params.groupId, email: normalizedEmail }).unwrap();
+      if (mode === 'existing') {
+        await addExistingMember({ groupId: route.params.groupId, email: normalizedEmail }).unwrap();
+      } else {
+        await invite({ groupId: route.params.groupId, email: normalizedEmail }).unwrap();
+      }
     } catch {
-      setFormError('Could not create the invitation. Only group admins can invite members.');
+      setFormError(mode === 'existing'
+        ? 'Could not add this user. Check that they already have an account and are not already in this group.'
+        : 'Could not create the invitation. Please check the email and try again.');
     }
   };
 
@@ -48,7 +69,7 @@ export default function InviteMemberScreen({ route, navigation }: Props) {
     return (
       <View style={styles.state}>
         <BackButton onPress={() => navigation.goBack()} />
-        <EmptyState message="Only group admins can invite new members." />
+        <EmptyState message="Only group admins can add or invite members." />
       </View>
     );
   }
@@ -56,10 +77,33 @@ export default function InviteMemberScreen({ route, navigation }: Props) {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
       <BackButton onPress={() => navigation.goBack()} />
-      <ScreenHeader title="Invite a member" subtitle={`Invite someone to join ${group.name}.`} icon={UserPlus} />
-      <Text style={styles.label}>Their email address</Text>
+      <ScreenHeader title="Manage members" subtitle={`Add someone to ${group.name}.`} icon={UserPlus} />
+      <View style={styles.modeSelector}>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => selectMode('existing')}
+          style={[styles.modeButton, mode === 'existing' && styles.modeButtonSelected]}
+        >
+          <UserRoundPlus size={17} color={mode === 'existing' ? '#FFFFFF' : colors.primaryDark} />
+          <Text style={[styles.modeText, mode === 'existing' && styles.modeTextSelected]}>Existing user</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => selectMode('invite')}
+          style={[styles.modeButton, mode === 'invite' && styles.modeButtonSelected]}
+        >
+          <MailPlus size={17} color={mode === 'invite' ? '#FFFFFF' : colors.primaryDark} />
+          <Text style={[styles.modeText, mode === 'invite' && styles.modeTextSelected]}>Invite by email</Text>
+        </Pressable>
+      </View>
+      <Text style={styles.helper}>
+        {mode === 'existing'
+          ? 'Add a registered user directly using the email on their account.'
+          : 'Create a shareable invite code for someone who does not have an account yet.'}
+      </Text>
+      <Text style={styles.label}>Email address</Text>
       <AppTextInput
-        icon={MailPlus}
+        icon={mode === 'existing' ? UserRoundPlus : MailPlus}
         placeholder="name@example.com"
         value={email}
         onChangeText={setEmail}
@@ -67,10 +111,16 @@ export default function InviteMemberScreen({ route, navigation }: Props) {
         autoCapitalize="none"
         autoCorrect={false}
         maxLength={254}
-        editable={!invitation}
+        editable={!invitation && !addedMember?.added}
       />
       {formError ? <Text style={styles.error}>{formError}</Text> : null}
-      {invitation ? (
+      {addedMember?.added ? (
+        <View style={styles.invitationCard}>
+          <Text style={styles.successTitle}>Member added</Text>
+          <Text style={styles.message}>{email.trim()} has been added to {group.name}.</Text>
+          <PrimaryButton title="Back to group" onPress={() => navigation.goBack()} />
+        </View>
+      ) : invitation ? (
         <View style={styles.invitationCard}>
           <Text style={styles.successTitle}>Invitation created</Text>
           <Text style={styles.message}>
@@ -83,7 +133,11 @@ export default function InviteMemberScreen({ route, navigation }: Props) {
           <Text style={styles.note}>The app does not send invitation emails automatically; share the code directly.</Text>
         </View>
       ) : (
-        <PrimaryButton title={inviting ? 'Creating invitation...' : 'Create invitation'} onPress={submit} disabled={inviting} />
+        <PrimaryButton
+          title={adding ? 'Adding member...' : inviting ? 'Creating invitation...' : mode === 'existing' ? 'Add existing user' : 'Create invitation'}
+          onPress={submit}
+          disabled={adding || inviting}
+        />
       )}
     </ScrollView>
   );
@@ -94,6 +148,27 @@ const styles = StyleSheet.create({
   content: { padding: spacing.screen, paddingBottom: 32 },
   state: { flex: 1, backgroundColor: colors.background, padding: spacing.screen },
   label: { color: colors.text, fontSize: 14, fontWeight: '700', marginBottom: 8, marginTop: 4 },
+  modeSelector: {
+    flexDirection: 'row',
+    padding: 4,
+    marginBottom: 12,
+    borderRadius: 14,
+    backgroundColor: colors.primaryLight,
+  },
+  modeButton: {
+    flex: 1,
+    minHeight: 44,
+    paddingHorizontal: 8,
+    borderRadius: 11,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  modeButtonSelected: { backgroundColor: colors.primaryDark },
+  modeText: { color: colors.primaryDark, fontSize: 12, fontWeight: '700' },
+  modeTextSelected: { color: '#FFFFFF' },
+  helper: { color: colors.muted, fontSize: 13, lineHeight: 19, marginBottom: 14 },
   error: { color: colors.danger, fontSize: 13, marginBottom: 12 },
   invitationCard: {
     padding: 18,
