@@ -27,7 +27,12 @@ export const authService = {
     return res.data;
   },
   logout: async () => {
-    const res: any = await baseQuery({ url: '/auth/logout', method: 'POST' }, apiContext, {} as any);
+    const refreshToken = store.getState().auth.refreshToken;
+    const res: any = await baseQuery({
+      url: '/auth/logout',
+      method: 'POST',
+      data: refreshToken ? { refresh: refreshToken } : undefined,
+    }, apiContext, {} as any);
     if (res.error) throw res.error;
     return res.data;
   },
@@ -49,6 +54,23 @@ export const groupsService = {
 export const expensesService = {
   createExpense: async (groupId: string, payload: ExpenseCreateDTO, idempotencyKey?: string) => {
     const res: any = await baseQuery({ url: `/groups/${groupId}/expenses`, method: 'POST', data: payload, idempotencyKey }, apiContext, {} as any);
+    if (res.error) throw res.error;
+    return res.data;
+  },
+  updateExpense: async (groupId: string, expenseId: string, payload: ExpenseCreateDTO) => {
+    const res: any = await baseQuery({
+      url: `/groups/${groupId}/expenses/${expenseId}`,
+      method: 'PATCH',
+      data: payload,
+    }, apiContext, {} as any);
+    if (res.error) throw res.error;
+    return res.data;
+  },
+  deleteExpense: async (groupId: string, expenseId: string) => {
+    const res: any = await baseQuery({
+      url: `/groups/${groupId}/expenses/${expenseId}`,
+      method: 'DELETE',
+    }, apiContext, {} as any);
     if (res.error) throw res.error;
     return res.data;
   },

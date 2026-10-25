@@ -36,8 +36,12 @@ export const apiSlice = createApi({
       query: creds => ({ url: '/auth/login', method: 'POST', data: creds }),
       invalidatesTags: ['Auth'],
     }),
-    logout: builder.mutation<void, void>({
-      query: () => ({ url: '/auth/logout', method: 'POST' }),
+    logout: builder.mutation<void, { refreshToken?: string | null }>({
+      query: ({ refreshToken }) => ({
+        url: '/auth/logout',
+        method: 'POST',
+        data: refreshToken ? { refresh: refreshToken } : undefined,
+      }),
       invalidatesTags: ['Auth'],
     }),
     getCurrentUser: builder.query<UserDTO, void>({
@@ -59,6 +63,10 @@ export const apiSlice = createApi({
     getGroupExpenses: builder.query<ExpenseDTO[], string>({
       query: groupId => ({ url: `/groups/${groupId}/expenses` }),
       providesTags: (_result, _error, groupId) => [{ type: 'Expenses', id: groupId }],
+    }),
+    getExpense: builder.query<ExpenseDTO, { groupId: string; expenseId: string }>({
+      query: ({ groupId, expenseId }) => ({ url: `/groups/${groupId}/expenses/${expenseId}` }),
+      providesTags: (_result, _error, { groupId }) => [{ type: 'Expenses', id: groupId }],
     }),
     getGroupActivities: builder.query<GroupActivityDTO[], string>({
       query: groupId => ({ url: `/groups/${groupId}/activities` }),
@@ -91,6 +99,34 @@ export const apiSlice = createApi({
       query: ({ groupId, expense, idempotencyKey }) => ({ url: `/groups/${groupId}/expenses`, method: 'POST', data: expense, idempotencyKey }),
       invalidatesTags: (_result, _error, { groupId }) => [
         'Groups',
+        'Dashboard',
+        { type: 'Expenses', id: groupId },
+        { type: 'Balances', id: groupId },
+        { type: 'GroupActivities', id: groupId },
+      ],
+    }),
+    updateExpense: builder.mutation<ExpenseDTO, { groupId: string; expenseId: string; expense: ExpenseCreateDTO }>({
+      query: ({ groupId, expenseId, expense }) => ({
+        url: `/groups/${groupId}/expenses/${expenseId}`,
+        method: 'PATCH',
+        data: expense,
+      }),
+      invalidatesTags: (_result, _error, { groupId }) => [
+        'Groups',
+        'Dashboard',
+        { type: 'Expenses', id: groupId },
+        { type: 'Balances', id: groupId },
+        { type: 'GroupActivities', id: groupId },
+      ],
+    }),
+    deleteExpense: builder.mutation<void, { groupId: string; expenseId: string }>({
+      query: ({ groupId, expenseId }) => ({
+        url: `/groups/${groupId}/expenses/${expenseId}`,
+        method: 'DELETE',
+      }),
+      invalidatesTags: (_result, _error, { groupId }) => [
+        'Groups',
+        'Dashboard',
         { type: 'Expenses', id: groupId },
         { type: 'Balances', id: groupId },
         { type: 'GroupActivities', id: groupId },
@@ -129,12 +165,15 @@ export const {
   useCreateGroupMutation,
   useGetGroupDetailsQuery,
   useGetGroupExpensesQuery,
+  useGetExpenseQuery,
   useGetGroupActivitiesQuery,
   useGetSimplifiedDebtsQuery,
   useInviteGroupMemberMutation,
   useAddExistingGroupMemberMutation,
   useAcceptGroupInvitationMutation,
   useCreateExpenseMutation,
+  useUpdateExpenseMutation,
+  useDeleteExpenseMutation,
   useGetGroupBalancesQuery,
   useGetDashboardSummaryQuery,
   useGetActivityQuery,

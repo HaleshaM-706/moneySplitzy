@@ -1,45 +1,89 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import { Mail, UserRound } from 'lucide-react-native';
-import { useGetCurrentUserQuery } from '../../services/api/apiSlice';
+import { Alert, View, Text, StyleSheet, Pressable } from 'react-native';
+import { LogOut, Mail, UserRound } from 'lucide-react-native';
+import { apiSlice, useGetCurrentUserQuery, useLogoutMutation } from '../../services/api/apiSlice';
 import ScreenHeader from '../../shared/components/ScreenHeader';
 import LoadingIndicator from '../../shared/components/LoadingIndicator';
 import EmptyState from '../../shared/components/EmptyState';
+import { clearAuthSession } from '../auth/authStorage';
+import { clearCredentials } from '../auth/authSlice';
+import { useAppDispatch, useAppSelector } from '../../shared/hooks/useAppHooks';
 import { colors, spacing } from '../../shared/theme';
 
 export default function ProfileScreen() {
+  const dispatch = useAppDispatch();
+  const refreshToken = useAppSelector(state => state.auth.refreshToken);
   const { data: user, isLoading, isError } = useGetCurrentUserQuery();
+  const [logout, { isLoading: isLoggingOut }] = useLogoutMutation();
 
-  if (isLoading) return <View style={styles.state}><LoadingIndicator /></View>;
-  if (isError || !user) {
-    return <View style={styles.state}><EmptyState message="Could not load your profile. Please try again later." /></View>;
-  }
+  const handleLogout = async () => {
+    let logoutFailed = false;
+    let storageFailed = false;
+    try {
+      await logout({ refreshToken }).unwrap();
+    } catch {
+      logoutFailed = true;
+    }
+    try {
+      await clearAuthSession();
+    } catch {
+      storageFailed = true;
+    }
+    dispatch(clearCredentials());
+    dispatch(apiSlice.util.resetApiState());
+
+    if (storageFailed) {
+      Alert.alert('Sign-out incomplete', 'Could not remove the saved session from secure storage. Please try again.');
+    } else if (logoutFailed) {
+      Alert.alert(
+        'Signed out',
+        'Your session was removed from this device, but the server could not confirm that it was revoked.',
+      );
+    }
+  };
 
   return (
     <View style={styles.container}>
       <ScreenHeader title="Your profile" subtitle="Your account details in one place." icon={UserRound} />
-      <View style={styles.profileCard}>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>{(user.name || user.email).trim().charAt(0).toUpperCase()}</Text>
-        </View>
-        <Text style={styles.name}>{user.name || 'Name not provided'}</Text>
-        <Text style={styles.caption}>Money Splitzy member</Text>
-      </View>
-      <Text style={styles.sectionTitle}>Account details</Text>
-      <View style={styles.detailRow}>
-        <View style={styles.detailIcon}><UserRound size={18} color={colors.primaryDark} /></View>
-        <View>
-          <Text style={styles.label}>Name</Text>
-          <Text style={styles.value}>{user.name || 'Name not provided'}</Text>
-        </View>
-      </View>
-      <View style={styles.detailRow}>
-        <View style={styles.detailIcon}><Mail size={18} color={colors.primaryDark} /></View>
-        <View>
-          <Text style={styles.label}>Email address</Text>
-          <Text style={styles.value}>{user.email}</Text>
-        </View>
-      </View>
+      {isLoading ? (
+        <View style={styles.state}><LoadingIndicator /></View>
+      ) : isError || !user ? (
+        <View style={styles.state}><EmptyState message="Could not load your profile. Please try again later." /></View>
+      ) : (
+        <>
+          <View style={styles.profileCard}>
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>{(user.name || user.email).trim().charAt(0).toUpperCase()}</Text>
+            </View>
+            <Text style={styles.name}>{user.name || 'Name not provided'}</Text>
+            <Text style={styles.caption}>Money Splitzy member</Text>
+          </View>
+          <Text style={styles.sectionTitle}>Account details</Text>
+          <View style={styles.detailRow}>
+            <View style={styles.detailIcon}><UserRound size={18} color={colors.primaryDark} /></View>
+            <View>
+              <Text style={styles.label}>Name</Text>
+              <Text style={styles.value}>{user.name || 'Name not provided'}</Text>
+            </View>
+          </View>
+          <View style={styles.detailRow}>
+            <View style={styles.detailIcon}><Mail size={18} color={colors.primaryDark} /></View>
+            <View>
+              <Text style={styles.label}>Email address</Text>
+              <Text style={styles.value}>{user.email}</Text>
+            </View>
+          </View>
+        </>
+      )}
+      <Pressable
+        accessibilityRole="button"
+        disabled={isLoggingOut}
+        onPress={handleLogout}
+        style={[styles.logoutButton, isLoggingOut && styles.disabledButton]}
+      >
+        <LogOut size={19} color={colors.danger} />
+        <Text style={styles.logoutText}>{isLoggingOut ? 'Signing out...' : 'Log out'}</Text>
+      </Pressable>
     </View>
   );
 }
@@ -47,6 +91,19 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background, padding: spacing.screen },
   state: { flex: 1, backgroundColor: colors.background, padding: spacing.screen },
+  logoutButton: {
+    minHeight: 54,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surface,
+    borderRadius: 15,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginTop: 20,
+  },
+  disabledButton: { opacity: 0.6 },
+  logoutText: { color: colors.danger, fontSize: 15, fontWeight: '700', marginLeft: 9 },
   profileCard: {
     alignItems: 'center',
     backgroundColor: colors.surface,

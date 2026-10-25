@@ -8,6 +8,7 @@ import AppTextInput from '../../../shared/components/AppTextInput';
 import PrimaryButton from '../../../shared/components/PrimaryButton';
 import { useAppDispatch } from '../../../shared/hooks/useAppHooks';
 import { setCredentials } from '../authSlice';
+import { saveAuthSession } from '../authStorage';
 import { useLoginMutation } from '../../../services/api/apiSlice';
 import { colors, spacing } from '../../../shared/theme';
 
@@ -58,8 +59,8 @@ export default function LoginScreen({ navigation }: any) {
   const onSubmit = async (data: z.infer<typeof schema>) => {
     try {
       const result = await login(data).unwrap();
+      await saveAuthSession(result);
       dispatch(setCredentials({ token: result.access, refreshToken: result.refresh, user: result.user }));
-      navigation.replace('Main');
     } catch (error) {
       Alert.alert('Login failed', getLoginErrorMessage(error));
     }

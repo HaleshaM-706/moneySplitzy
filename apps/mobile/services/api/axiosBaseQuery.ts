@@ -1,8 +1,9 @@
 import type { BaseQueryFn } from '@reduxjs/toolkit/query';
-import axios, { AxiosRequestConfig, AxiosError } from 'axios';
+import { AxiosRequestConfig, AxiosError } from 'axios';
 import { apiClient, bareClient } from './apiClient';
 import type { RootState } from '../../app/store/store';
 import { setCredentials, clearCredentials } from '../../features/auth/authSlice';
+import { clearAuthSession, saveAuthSession } from '../../features/auth/authStorage';
 
 type AxiosBaseQueryArgs = {
   url: string;
@@ -19,7 +20,11 @@ const refreshToken = async (getState: () => RootState, dispatch: any) => {
   const state = getState();
   const current = state.auth;
   const user = current?.user;
-  if (!current?.refreshToken || !user?.id) return null;
+  if (!current?.refreshToken || !user?.id) {
+    await clearAuthSession();
+    dispatch(clearCredentials());
+    return null;
+  }
 
   if (refreshingPromise) return refreshingPromise;
 
@@ -27,13 +32,16 @@ const refreshToken = async (getState: () => RootState, dispatch: any) => {
     try {
       const resp = await bareClient.post('/auth/refresh', { userId: user.id, refresh: current.refreshToken });
       const data = resp.data;
-      if (data?.access) {
+      if (data?.access && data?.refresh) {
+        await saveAuthSession({ access: data.access, refresh: data.refresh, user });
         dispatch(setCredentials({ token: data.access, refreshToken: data.refresh ?? null, user }));
         return data.access as string;
       }
+      await clearAuthSession();
       dispatch(clearCredentials());
       return null;
     } catch (e) {
+      await clearAuthSession();
       dispatch(clearCredentials());
       return null;
     } finally {
@@ -45,7 +53,7 @@ const refreshToken = async (getState: () => RootState, dispatch: any) => {
 };
 
 export const axiosBaseQuery = ({ baseUrl }: { baseUrl: string } = { baseUrl: '' }): BaseQueryFn<AxiosBaseQueryArgs, unknown, unknown> =>
-  async (args, api, extraOptions) => {
+  async (args, api, _extraOptions) => {
     const { url, method = 'GET', data, params, headers = {}, idempotencyKey } = args;
     const token = (api.getState() as RootState).auth.token;
 
@@ -85,6 +93,9 @@ export const axiosBaseQuery = ({ baseUrl }: { baseUrl: string } = { baseUrl: '' 
           try {
             const retryConfig: AxiosRequestConfig = {
               ...config,
+              ...(url === '/auth/logout' && data && typeof data === 'object'
+                ? { data: { ...data, refresh: (api.getState() as RootState).auth.refreshToken } }
+                : {}),
               headers: { ...(config.headers || {}), authorization: `Bearer ${newToken}` },
             };
             const retryResult = await apiClient.request(retryConfig);

@@ -4,8 +4,10 @@ import { Check, CircleDollarSign } from 'lucide-react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
   useCreateExpenseMutation,
+  useGetExpenseQuery,
   useGetCurrentUserQuery,
   useGetGroupDetailsQuery,
+  useUpdateExpenseMutation,
 } from '../../services/api/apiSlice';
 import AppTextInput from '../../shared/components/AppTextInput';
 import BackButton from '../../shared/components/BackButton';
@@ -26,11 +28,32 @@ const splitOptions: { value: ExpenseSplitType; label: string }[] = [
   { value: 'SHARES', label: 'Shares' },
 ];
 
+function getMutationErrorMessage(error: unknown, fallback: string): string {
+  if (typeof error !== 'object' || error === null || !('data' in error)) return fallback;
+  const { data, status } = error as { data?: unknown; status?: unknown };
+  if (typeof data === 'object' && data !== null && 'message' in data) {
+    const message = (data as { message?: unknown }).message;
+    if (typeof message === 'string') return message;
+    if (Array.isArray(message)) return message.filter((part): part is string => typeof part === 'string').join('\n') || fallback;
+  }
+  if (typeof data === 'string' && data.length > 0) return data;
+  if (typeof status === 'number') return `Request failed (HTTP ${status}). ${fallback}`;
+  return fallback;
+}
+
 export default function AddExpenseScreen({ route, navigation }: Props) {
   const groupId = route.params.groupId;
+  const expenseId = route.params.expenseId;
   const { data: group, isLoading: groupLoading, isError: groupError, refetch: refetchGroup } = useGetGroupDetailsQuery(groupId);
   const { data: user, isLoading: userLoading, isError: userError, refetch: refetchUser } = useGetCurrentUserQuery();
+  const {
+    data: expense,
+    isLoading: expenseLoading,
+    isError: expenseError,
+    refetch: refetchExpense,
+  } = useGetExpenseQuery({ groupId, expenseId: expenseId ?? '' }, { skip: !expenseId });
   const [createExpense, { isLoading: saving }] = useCreateExpenseMutation();
+  const [updateExpense, { isLoading: updating }] = useUpdateExpenseMutation();
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
@@ -41,15 +64,43 @@ export default function AddExpenseScreen({ route, navigation }: Props) {
   const [splitType, setSplitType] = useState<ExpenseSplitType>('EQUAL');
   const [splitValues, setSplitValues] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState('');
-  const initializedGroupId = useRef<string | null>(null);
+  const initializedFormKey = useRef<string | null>(null);
 
   useEffect(() => {
-    if (group && user && initializedGroupId.current !== group.id) {
-      initializedGroupId.current = group.id;
+    if (!group || !user || (expenseId && expenseLoading) || (expenseId && !expense)) return;
+    const formKey = `${group.id}:${expenseId ?? 'new'}`;
+    if (initializedFormKey.current === formKey) return;
+    initializedFormKey.current = formKey;
+
+    if (expense) {
+      const splitIds = expense.splits.map(split => split.userId);
+      const percentageBasisPoints = splitIds.map((userId, index) => index === splitIds.length - 1
+        ? 10000 - splitIds.slice(0, index).reduce((sum, id) => {
+          const amountMinor = expense.splits.find(split => split.userId === id)?.amountMinor ?? 0;
+          return sum + Math.round(amountMinor * 10000 / expense.totalMinor);
+        }, 0)
+        : Math.round((expense.splits.find(split => split.userId === userId)?.amountMinor ?? 0) * 10000 / expense.totalMinor));
+      setDescription(expense.description ?? '');
+      setAmount((expense.totalMinor / 100).toFixed(2));
+      setSelectedUserIds(splitIds);
+      setPayerId(expense.payments[0]?.userId ?? '');
+      setCategory(expense.category ?? 'OTHER');
+      setExpenseDate((expense.expenseDate ?? expense.createdAt).slice(0, 10));
+      setNotes(expense.notes ?? '');
+      setSplitType(expense.splitType);
+      setSplitValues(Object.fromEntries(expense.splits.map((split, index) => [
+        split.userId,
+        expense.splitType === 'EXACT'
+          ? (split.amountMinor / 100).toFixed(2)
+          : expense.splitType === 'PERCENT'
+            ? (percentageBasisPoints[index] / 100).toFixed(2)
+            : String(split.amountMinor),
+      ])));
+    } else {
       setSelectedUserIds(group.members.map(member => member.user.id));
       setPayerId(group.members.some(member => member.user.id === user.id) ? user.id : group.members[0]?.user.id ?? '');
     }
-  }, [group, user]);
+  }, [expense, expenseId, expenseLoading, group, user]);
 
   const toggleMember = (userId: string) => {
     setSelectedUserIds(current => current.includes(userId)
@@ -103,34 +154,39 @@ export default function AddExpenseScreen({ route, navigation }: Props) {
 
     setFormError('');
     try {
-      await createExpense({
-        groupId,
-        expense: {
-          description: title,
-          category,
-          notes: notes.trim() || undefined,
-          expenseDate: parsedDate.toISOString(),
-          totalMinor,
-          currency: group.currency,
-          splitType,
-          payments: [{ userId: payerId, amountMinor: totalMinor }],
-          splits: splitResult.splits,
-        },
-      }).unwrap();
+      const payload = {
+        description: title,
+        category,
+        notes: notes.trim() || undefined,
+        expenseDate: parsedDate.toISOString(),
+        totalMinor,
+        currency: group.currency,
+        splitType,
+        payments: [{ userId: payerId, amountMinor: totalMinor }],
+        splits: splitResult.splits,
+      };
+      if (expenseId) {
+        await updateExpense({ groupId, expenseId, expense: payload }).unwrap();
+      } else {
+        await createExpense({ groupId, expense: payload }).unwrap();
+      }
       navigation.goBack();
-    } catch {
-      setFormError('Could not save the expense. Check that all selected people are group members, then try again.');
+    } catch (error) {
+      setFormError(getMutationErrorMessage(
+        error,
+        `Could not ${expenseId ? 'update' : 'save'} the expense. Check that all selected people are group members, then try again.`,
+      ));
     }
   };
 
-  if (groupLoading || userLoading) return <View style={styles.state}><LoadingIndicator /></View>;
-  if (groupError || userError || !group || !user) {
+  if (groupLoading || userLoading || expenseLoading) return <View style={styles.state}><LoadingIndicator /></View>;
+  if (groupError || userError || expenseError || !group || !user || (expenseId && !expense)) {
     return (
       <View style={styles.state}>
         <BackButton onPress={() => navigation.goBack()} />
-        <EmptyState message="Could not load the group or your account. Check your connection and try again." />
+        <EmptyState message="Could not load the group, account, or expense. Check your connection and try again." />
         <Pressable
-          onPress={() => { refetchGroup(); refetchUser(); }}
+          onPress={() => { refetchGroup(); refetchUser(); if (expenseId) refetchExpense(); }}
           style={styles.retry}
           accessibilityRole="button"
         >
@@ -143,7 +199,11 @@ export default function AddExpenseScreen({ route, navigation }: Props) {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
       <BackButton onPress={() => navigation.goBack()} />
-      <ScreenHeader title="Add an expense" subtitle={`Add a shared expense to ${group.name}.`} icon={CircleDollarSign} />
+      <ScreenHeader
+        title={expenseId ? 'Edit expense' : 'Add an expense'}
+        subtitle={expenseId ? `Correct this shared expense in ${group.name}.` : `Add a shared expense to ${group.name}.`}
+        icon={CircleDollarSign}
+      />
       <Text style={styles.label}>Expense title</Text>
       <AppTextInput
         placeholder="e.g. Dinner"
@@ -267,8 +327,12 @@ export default function AddExpenseScreen({ route, navigation }: Props) {
         style={styles.notesInput}
       />
       {formError ? <Text style={styles.error}>{formError}</Text> : null}
-      {saving ? <LoadingIndicator /> : null}
-      <PrimaryButton title={saving ? 'Saving expense...' : 'Save expense'} onPress={submit} disabled={saving} />
+      {saving || updating ? <LoadingIndicator /> : null}
+      <PrimaryButton
+        title={saving || updating ? (expenseId ? 'Saving changes...' : 'Saving expense...') : (expenseId ? 'Save changes' : 'Save expense')}
+        onPress={submit}
+        disabled={saving || updating}
+      />
     </ScrollView>
   );
 }

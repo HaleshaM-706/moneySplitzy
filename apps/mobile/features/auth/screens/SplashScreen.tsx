@@ -1,16 +1,20 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import axios from 'axios';
 import { Sparkles, Wallet } from 'lucide-react-native';
 import PrimaryButton from '../../../shared/components/PrimaryButton';
-import { checkApiHealth } from '../../../services/api/apiClient';
+import { bareClient, checkApiHealth } from '../../../services/api/apiClient';
+import { useAppDispatch } from '../../../shared/hooks/useAppHooks';
+import { clearCredentials, setCredentials, setSessionChecked } from '../authSlice';
+import { clearAuthSession, loadAuthSession, saveAuthSession } from '../authStorage';
 import { colors } from '../../../shared/theme';
 
 const MAX_ATTEMPTS = 6;
 const INITIAL_RETRY_DELAY_MS = 15000;
 
-export default function SplashScreen({ navigation }: any) {
+export default function SplashScreen() {
+  const dispatch = useAppDispatch();
   const [retryNonce, setRetryNonce] = useState(0);
-  const [attempt, setAttempt] = useState(0);
   const [isUnavailable, setIsUnavailable] = useState(false);
 
   useEffect(() => {
@@ -22,11 +26,8 @@ export default function SplashScreen({ navigation }: any) {
       setIsUnavailable(false);
       for (let currentAttempt = 1; currentAttempt <= MAX_ATTEMPTS; currentAttempt += 1) {
         if (cancelled) return;
-        setAttempt(currentAttempt);
         try {
           await checkApiHealth();
-          if (!cancelled) navigation.replace('Login');
-          return;
         } catch {
           if (cancelled) return;
           if (currentAttempt === MAX_ATTEMPTS) {
@@ -41,6 +42,63 @@ export default function SplashScreen({ navigation }: any) {
               resolve();
             }, delay);
           });
+          continue;
+        }
+
+        try {
+          const session = await loadAuthSession();
+          if (cancelled) return;
+          if (!session) {
+            dispatch(setSessionChecked());
+            return;
+          }
+
+          const response = await bareClient.post<{ access?: string; refresh?: string }>(
+            '/auth/refresh',
+            { userId: session.user.id, refresh: session.refresh },
+          );
+          if (cancelled) return;
+
+          if (!response.data.access || !response.data.refresh) {
+            try {
+              await clearAuthSession();
+            } catch {
+              setIsUnavailable(true);
+              return;
+            }
+            dispatch(clearCredentials());
+            return;
+          }
+
+          const renewedSession = {
+            access: response.data.access,
+            refresh: response.data.refresh,
+            user: session.user,
+          };
+          await saveAuthSession(renewedSession);
+          if (!cancelled) {
+            dispatch(setCredentials({
+              token: renewedSession.access,
+              refreshToken: renewedSession.refresh,
+              user: renewedSession.user,
+            }));
+          }
+          return;
+        } catch (error) {
+          if (cancelled) return;
+          if (axios.isAxiosError(error) && [400, 401, 403].includes(error.response?.status ?? 0)) {
+            try {
+              await clearAuthSession();
+            } catch {
+              setIsUnavailable(true);
+              return;
+            }
+            dispatch(clearCredentials());
+            return;
+          }
+
+          setIsUnavailable(true);
+          return;
         }
       }
     };
@@ -51,7 +109,7 @@ export default function SplashScreen({ navigation }: any) {
       if (retryTimer) clearTimeout(retryTimer);
       resolveRetry?.();
     };
-  }, [navigation, retryNonce]);
+  }, [dispatch, retryNonce]);
 
   return (
     <View style={styles.container}>
@@ -62,12 +120,11 @@ export default function SplashScreen({ navigation }: any) {
       <Text style={styles.title}>Money Splitzy</Text>
       {isUnavailable ? (
         <>
-          <Text style={styles.subtitle}>Could not connect to the server after {MAX_ATTEMPTS} attempts.</Text>
+          <Text style={styles.subtitle}>Could not restore your session.</Text>
           <Text style={styles.hint}>Check your internet connection and make sure the API server is running, then retry.</Text>
           <PrimaryButton
             title="Retry connection"
             onPress={() => {
-              setAttempt(0);
               setRetryNonce(value => value + 1);
             }}
             style={styles.retryButton}

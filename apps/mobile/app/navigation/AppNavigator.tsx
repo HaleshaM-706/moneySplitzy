@@ -15,6 +15,7 @@ import InviteMemberScreen from '../../features/groups/InviteMemberScreen';
 import AcceptInvitationScreen from '../../features/groups/AcceptInvitationScreen';
 import ActivityScreen from '../../features/activity/ActivityScreen';
 import ProfileScreen from '../../features/profile/ProfileScreen';
+import { useAppSelector } from '../../shared/hooks/useAppHooks';
 
 type MainTabParamList = {
   Balances: undefined;
@@ -30,7 +31,7 @@ export type RootStackParamList = {
   Main: NavigatorScreenParams<MainTabParamList> | undefined;
   CreateGroup: undefined;
   GroupDetails: { groupId: string };
-  AddExpense: { groupId: string };
+  AddExpense: { groupId: string; expenseId?: string };
   InviteMember: { groupId: string };
   AcceptInvitation: undefined;
 };
@@ -102,17 +103,27 @@ function MainTabs() {
 }
 
 export const AppNavigator = () => {
+  const { token, isCheckingSession } = useAppSelector(state => state.auth);
+
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="Splash" component={SplashScreen} />
-      <Stack.Screen name="Login" component={LoginScreen} />
-      <Stack.Screen name="Register" component={RegisterScreen} />
-      <Stack.Screen name="Main" component={MainTabs} />
-      <Stack.Screen name="CreateGroup" component={CreateGroupScreen} />
-      <Stack.Screen name="GroupDetails" component={GroupDetailsScreen} />
-      <Stack.Screen name="AddExpense" component={AddExpenseScreen} />
-      <Stack.Screen name="InviteMember" component={InviteMemberScreen} />
-      <Stack.Screen name="AcceptInvitation" component={AcceptInvitationScreen} />
+      {isCheckingSession ? (
+        <Stack.Screen name="Splash" component={SplashScreen} />
+      ) : token ? (
+        <>
+          <Stack.Screen name="Main" component={MainTabs} />
+          <Stack.Screen name="CreateGroup" component={CreateGroupScreen} />
+          <Stack.Screen name="GroupDetails" component={GroupDetailsScreen} />
+          <Stack.Screen name="AddExpense" component={AddExpenseScreen} />
+          <Stack.Screen name="InviteMember" component={InviteMemberScreen} />
+          <Stack.Screen name="AcceptInvitation" component={AcceptInvitationScreen} />
+        </>
+      ) : (
+        <>
+          <Stack.Screen name="Login" component={LoginScreen} />
+          <Stack.Screen name="Register" component={RegisterScreen} />
+        </>
+      )}
     </Stack.Navigator>
   );
 };

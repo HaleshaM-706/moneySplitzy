@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import { BarChart3, CircleDollarSign, Clock3, MailPlus, Plus, Receipt, Users, Wallet } from 'lucide-react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { BarChart3, CircleDollarSign, Clock3, MailPlus, Pencil, Plus, Receipt, Trash2, Users, Wallet } from 'lucide-react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
   useGetCurrentUserQuery,
@@ -10,6 +10,7 @@ import {
   useGetGroupExpensesQuery,
   useGetSimplifiedDebtsQuery,
   useCreateSettlementMutation,
+  useDeleteExpenseMutation,
 } from '../../services/api/apiSlice';
 import type { ExpenseDTO, GroupActivityDTO } from '../../services/api/types';
 import BackButton from '../../shared/components/BackButton';
@@ -50,6 +51,8 @@ function ExpenseRow({
   userId,
   expanded,
   onPress,
+  onEdit,
+  onDelete,
 }: {
   expense: ExpenseDTO;
   currency: string;
@@ -57,20 +60,24 @@ function ExpenseRow({
   userId?: string;
   expanded: boolean;
   onPress: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
 }) {
   const payerId = expense.payments[0]?.userId;
   const payerName = members.find(member => member.id === payerId)?.name ?? 'Group member';
   const myShare = expense.splits.find(split => split.userId === userId)?.amountMinor ?? 0;
   const date = new Date(expense.expenseDate || expense.createdAt).toLocaleDateString();
   return (
-    <Pressable style={styles.expenseCard} onPress={onPress} accessibilityRole="button" accessibilityLabel={`View ${expense.description || 'expense'} details`}>
-      <View style={styles.expenseIcon}><Receipt size={18} color={colors.primaryDark} /></View>
-      <View style={styles.expenseCopy}>
-        <Text style={styles.expenseTitle} numberOfLines={1}>{expense.description || 'Expense'}</Text>
-        <Text style={styles.expenseMeta}>{expense.category || 'Other'} · Paid by {payerName} · {date}</Text>
-        <Text style={styles.expenseShare}>Your share: {money(myShare, currency)}</Text>
-      </View>
-      <Text style={styles.expenseTotal}>{money(expense.totalMinor, currency)}</Text>
+    <View style={styles.expenseCard}>
+      <Pressable style={styles.expenseSummary} onPress={onPress} accessibilityRole="button" accessibilityLabel={`View ${expense.description || 'expense'} details`}>
+        <View style={styles.expenseIcon}><Receipt size={18} color={colors.primaryDark} /></View>
+        <View style={styles.expenseCopy}>
+          <Text style={styles.expenseTitle} numberOfLines={1}>{expense.description || 'Expense'}</Text>
+          <Text style={styles.expenseMeta}>{expense.category || 'Other'} · Paid by {payerName} · {date}</Text>
+          <Text style={styles.expenseShare}>Your share: {money(myShare, currency)}</Text>
+        </View>
+        <Text style={styles.expenseTotal}>{money(expense.totalMinor, currency)}</Text>
+      </Pressable>
       {expanded ? (
         <View style={styles.splitDetails}>
           {expense.notes ? <Text style={styles.expenseMeta}>Note: {expense.notes}</Text> : null}
@@ -83,7 +90,19 @@ function ExpenseRow({
           <Text style={styles.expenseMeta}>Status: {expense.status.toLowerCase()}</Text>
         </View>
       ) : null}
-    </Pressable>
+      {expense.status !== 'CANCELLED' ? (
+        <View style={styles.expenseActions}>
+          <Pressable onPress={onEdit} style={styles.expenseAction} accessibilityRole="button">
+            <Pencil size={15} color={colors.primaryDark} />
+            <Text style={styles.expenseActionText}>Edit</Text>
+          </Pressable>
+          <Pressable onPress={onDelete} style={styles.expenseAction} accessibilityRole="button">
+            <Trash2 size={15} color={colors.danger} />
+            <Text style={[styles.expenseActionText, styles.deleteText]}>Delete</Text>
+          </Pressable>
+        </View>
+      ) : null}
+    </View>
   );
 }
 
@@ -107,6 +126,7 @@ export default function GroupDetailsScreen({ route, navigation }: Props) {
   const { data: debts = [], isLoading: debtsLoading, isError: debtsError, refetch: refetchDebts } =
     useGetSimplifiedDebtsQuery(groupId, { skip: !showSettleUp });
   const [createSettlement, { isLoading: settling }] = useCreateSettlementMutation();
+  const [deleteExpense] = useDeleteExpenseMutation();
   const members = useMemo(
     () => group?.members.map(member => ({ id: member.user.id, name: member.user.name || member.user.email })) ?? [],
     [group],
@@ -151,6 +171,27 @@ export default function GroupDetailsScreen({ route, navigation }: Props) {
     }
   };
 
+  const confirmDeleteExpense = (expense: ExpenseDTO) => {
+    Alert.alert(
+      'Delete this expense?',
+      'It will be removed from the group totals and balances.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteExpense({ groupId, expenseId: expense.id }).unwrap();
+            } catch (error) {
+              Alert.alert('Could not delete expense', getExpenseErrorMessage(error, 'Please try again.'));
+            }
+          },
+        },
+      ],
+    );
+  };
+
   if (groupLoading) return <View style={styles.state}><LoadingIndicator /></View>;
   if (groupError || !group) {
     return (
@@ -176,6 +217,8 @@ export default function GroupDetailsScreen({ route, navigation }: Props) {
         userId={user?.id}
         expanded={expandedExpenseId === expense.id}
         onPress={() => setExpandedExpenseId(current => current === expense.id ? null : expense.id)}
+        onEdit={() => navigation.navigate('AddExpense', { groupId, expenseId: expense.id })}
+        onDelete={() => confirmDeleteExpense(expense)}
       />
     ))
     : (
@@ -362,6 +405,19 @@ export default function GroupDetailsScreen({ route, navigation }: Props) {
   );
 }
 
+function getExpenseErrorMessage(error: unknown, fallback: string): string {
+  if (typeof error !== 'object' || error === null || !('data' in error)) return fallback;
+  const { data, status } = error as { data?: unknown; status?: unknown };
+  if (typeof data === 'object' && data !== null && 'message' in data) {
+    const message = (data as { message?: unknown }).message;
+    if (typeof message === 'string') return message;
+    if (Array.isArray(message)) return message.filter((part): part is string => typeof part === 'string').join('\n') || fallback;
+  }
+  if (typeof data === 'string' && data.length > 0) return data;
+  if (typeof status === 'number') return `Request failed (HTTP ${status}). ${fallback}`;
+  return fallback;
+}
+
 function SummaryValue({ icon, label, amount, currency }: { icon: React.ReactNode; label: string; amount: number; currency: string }) {
   return (
     <View style={styles.summaryCard}>
@@ -426,7 +482,12 @@ const styles = StyleSheet.create({
   activityTitle: { color: colors.text, fontSize: 13, fontWeight: '700' },
   activitySubtitle: { color: colors.muted, fontSize: 11, marginTop: 3 },
   activityAmount: { color: colors.text, fontSize: 12, fontWeight: '800' },
-  expenseCard: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', padding: 12, marginBottom: 9, borderRadius: 15, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
+  expenseCard: { padding: 12, marginBottom: 9, borderRadius: 15, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
+  expenseSummary: { flexDirection: 'row', alignItems: 'center' },
+  expenseActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10, borderTopWidth: 1, borderTopColor: colors.border, marginTop: 10, paddingTop: 9 },
+  expenseAction: { minWidth: 72, minHeight: 34, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 10, backgroundColor: colors.background },
+  expenseActionText: { color: colors.primaryDark, fontSize: 12, fontWeight: '700' },
+  deleteText: { color: colors.danger },
   expenseIcon: { width: 37, height: 37, borderRadius: 12, backgroundColor: colors.primaryLight, alignItems: 'center', justifyContent: 'center' },
   expenseCopy: { flex: 1, marginHorizontal: 9 },
   expenseTitle: { color: colors.text, fontSize: 13, fontWeight: '800' },
