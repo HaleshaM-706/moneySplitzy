@@ -3,9 +3,11 @@ import {
   BadRequestException,
   ConflictException,
   Controller,
+  Delete,
   Get,
   NotFoundException,
   Param,
+  Patch,
   ParseUUIDPipe,
   Post,
   Req,
@@ -242,6 +244,129 @@ export class ExpensesController {
     });
     if (!expense) throw new NotFoundException('Expense not found');
     return expense;
+  }
+
+  @Patch('groups/:groupId/expenses/:expenseId')
+  async update(
+    @Req() req: any,
+    @Param('groupId', ParseUUIDPipe) groupId: string,
+    @Param('expenseId', ParseUUIDPipe) expenseId: string,
+    @Body() body: CreateExpenseDto,
+  ) {
+    const member = await this.prisma.groupMember.findUnique({
+      where: { groupId_userId: { groupId, userId: req.user.id } },
+      include: { group: { select: { currency: true } } },
+    });
+    if (!member) throw new NotFoundException('Group not found');
+    if (body.currency && body.currency !== member.group.currency) {
+      throw new BadRequestException('Expense currency must match the group currency');
+    }
+
+    const expense = await this.prisma.expense.findFirst({
+      where: { id: expenseId, groupId },
+      select: { id: true, status: true },
+    });
+    if (!expense) throw new NotFoundException('Expense not found');
+    if (expense.status === ExpenseStatus.CANCELLED) {
+      throw new ConflictException('Cancelled expenses cannot be edited');
+    }
+
+    this.assertAllocation(body.payments, body.totalMinor, 'payments');
+    this.assertAllocation(body.splits, body.totalMinor, 'splits');
+    this.assertUniqueUsers(body.payments, 'payments');
+    this.assertUniqueUsers(body.splits, 'splits');
+
+    const users = [...new Set([...body.payments, ...body.splits].map(row => row.userId))];
+    const groupMembers = await this.prisma.groupMember.findMany({
+      where: { groupId, userId: { in: users } },
+      select: { userId: true },
+    });
+    if (groupMembers.length !== users.length) {
+      throw new NotFoundException('All payment and split users must be group members');
+    }
+
+    return this.prisma.$transaction(async tx => {
+      const updated = await tx.expense.updateMany({
+        where: { id: expenseId, groupId, status: { not: ExpenseStatus.CANCELLED } },
+        data: {
+          description: body.description,
+          category: body.category ?? 'OTHER',
+          notes: body.notes,
+          expenseDate: body.expenseDate ? new Date(body.expenseDate) : undefined,
+          totalMinor: body.totalMinor,
+          currency: body.currency ?? member.group.currency,
+          splitType: body.splitType,
+        },
+      });
+      if (updated.count === 0) {
+        throw new ConflictException('Cancelled expenses cannot be edited');
+      }
+
+      await tx.expensePayment.deleteMany({ where: { expenseId } });
+      await tx.expenseSplit.deleteMany({ where: { expenseId } });
+      await tx.expensePayment.createMany({
+        data: body.payments.map(({ userId, amountMinor }) => ({ expenseId, userId, amountMinor })),
+      });
+      await tx.expenseSplit.createMany({
+        data: body.splits.map(({ userId, amountMinor }) => ({ expenseId, userId, amountMinor })),
+      });
+      await tx.auditLog.create({
+        data: {
+          actorUserId: req.user.id,
+          entityType: 'Expense',
+          entityId: expenseId,
+          action: 'UPDATE',
+          metadata: { groupId, totalMinor: body.totalMinor, currency: body.currency ?? member.group.currency },
+        },
+      });
+
+      return tx.expense.findUnique({
+        where: { id: expenseId },
+        include: {
+          payments: { select: { userId: true, amountMinor: true } },
+          splits: { select: { userId: true, amountMinor: true } },
+        },
+      });
+    });
+  }
+
+  @Delete('groups/:groupId/expenses/:expenseId')
+  async remove(
+    @Req() req: any,
+    @Param('groupId', ParseUUIDPipe) groupId: string,
+    @Param('expenseId', ParseUUIDPipe) expenseId: string,
+  ) {
+    const member = await this.prisma.groupMember.findUnique({
+      where: { groupId_userId: { groupId, userId: req.user.id } },
+      select: { id: true },
+    });
+    if (!member) throw new NotFoundException('Group not found');
+
+    return this.prisma.$transaction(async tx => {
+      const result = await tx.expense.updateMany({
+        where: { id: expenseId, groupId, status: { not: ExpenseStatus.CANCELLED } },
+        data: { status: ExpenseStatus.CANCELLED },
+      });
+      if (result.count === 0) {
+        const expense = await tx.expense.findFirst({
+          where: { id: expenseId, groupId },
+          select: { id: true },
+        });
+        if (!expense) throw new NotFoundException('Expense not found');
+        throw new ConflictException('Expense was already deleted');
+      }
+
+      await tx.auditLog.create({
+        data: {
+          actorUserId: req.user.id,
+          entityType: 'Expense',
+          entityId: expenseId,
+          action: 'DELETE',
+          metadata: { groupId },
+        },
+      });
+      return { ok: true };
+    });
   }
 
   private assertAllocation(

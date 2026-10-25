@@ -15,8 +15,8 @@ export class DebtSimplificationService {
     const group = await this.prisma.group.findUnique({ where: { id: groupId }, select: { currency: true } });
     const currency = group?.currency ?? 'INR';
 
-    const payments = await this.prisma.expensePayment.findMany({ where: { expense: { groupId } }, select: { userId: true, amountMinor: true } });
-    const splits = await this.prisma.expenseSplit.findMany({ where: { expense: { groupId } }, select: { userId: true, amountMinor: true } });
+    const payments = await this.prisma.expensePayment.findMany({ where: { expense: { groupId, status: { not: 'CANCELLED' } } }, select: { userId: true, amountMinor: true } });
+    const splits = await this.prisma.expenseSplit.findMany({ where: { expense: { groupId, status: { not: 'CANCELLED' } } }, select: { userId: true, amountMinor: true } });
     const settlements = await this.prisma.settlement.findMany({ where: { groupId, status: 'COMPLETED' }, select: { fromUserId: true, toUserId: true, amountMinor: true, currency: true } });
 
     const map: Record<string, number> = {};

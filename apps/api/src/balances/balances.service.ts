@@ -26,14 +26,14 @@ export class BalancesService {
     }
 
     // payments (who paid for expenses)
-    const payments = await this.prisma.expensePayment.findMany({ where: { expense: { groupId } }, select: { userId: true, amountMinor: true } });
+    const payments = await this.prisma.expensePayment.findMany({ where: { expense: { groupId, status: { not: 'CANCELLED' } } }, select: { userId: true, amountMinor: true } });
     for (const p of payments) {
       if (!map[p.userId]) continue;
       map[p.userId].paidMinor += p.amountMinor;
     }
 
     // splits (who owes share of expenses)
-    const splits = await this.prisma.expenseSplit.findMany({ where: { expense: { groupId } }, select: { userId: true, amountMinor: true } });
+    const splits = await this.prisma.expenseSplit.findMany({ where: { expense: { groupId, status: { not: 'CANCELLED' } } }, select: { userId: true, amountMinor: true } });
     for (const s of splits) {
       if (!map[s.userId]) continue;
       map[s.userId].owesMinor += s.amountMinor;

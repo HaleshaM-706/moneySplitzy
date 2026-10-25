@@ -51,11 +51,11 @@ export class DashboardController {
     if (groupIds.length > 0) {
       const [payments, splits, settlements] = await Promise.all([
         this.prisma.expensePayment.findMany({
-          where: { userId, expense: { groupId: { in: groupIds } } },
+          where: { userId, expense: { groupId: { in: groupIds }, status: { not: 'CANCELLED' } } },
           select: { amountMinor: true, expense: { select: { group: { select: { currency: true } } } } },
         }),
         this.prisma.expenseSplit.findMany({
-          where: { userId, expense: { groupId: { in: groupIds } } },
+          where: { userId, expense: { groupId: { in: groupIds }, status: { not: 'CANCELLED' } } },
           select: { amountMinor: true, expense: { select: { group: { select: { currency: true } } } } },
         }),
         this.prisma.settlement.findMany({
