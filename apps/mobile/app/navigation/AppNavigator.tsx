@@ -6,6 +6,7 @@ import type { NavigatorScreenParams } from '@react-navigation/native';
 import SplashScreen from '../../features/auth/screens/SplashScreen';
 import LoginScreen from '../../features/auth/screens/LoginScreen';
 import RegisterScreen from '../../features/auth/screens/RegisterScreen';
+import VerifyEmailScreen from '../../features/auth/screens/VerifyEmailScreen';
 import DashboardScreen from '../../features/dashboard/DashboardScreen';
 import GroupsScreen from '../../features/groups/GroupsScreen';
 import CreateGroupScreen from '../../features/groups/CreateGroupScreen';
@@ -28,6 +29,7 @@ export type RootStackParamList = {
   Splash: undefined;
   Login: undefined;
   Register: undefined;
+  VerifyEmail: { email: string; emailSent: boolean };
   Main: NavigatorScreenParams<MainTabParamList> | undefined;
   CreateGroup: undefined;
   GroupDetails: { groupId: string };
@@ -122,6 +124,7 @@ export const AppNavigator = () => {
         <>
           <Stack.Screen name="Login" component={LoginScreen} />
           <Stack.Screen name="Register" component={RegisterScreen} />
+          <Stack.Screen name="VerifyEmail" component={VerifyEmailScreen} />
         </>
       )}
     </Stack.Navigator>

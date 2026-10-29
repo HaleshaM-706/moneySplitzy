@@ -21,20 +21,23 @@ export default function RegisterScreen({ navigation }: any) {
 
   const onSubmit = async (data: any) => {
     try {
-      await register({
+      const result = await register({
         name: data.name,
-        email: data.email,
+        email: data.email.trim().toLowerCase(),
         password: data.password,
       }).unwrap();
 
-      navigation.replace('Login');
+      navigation.replace('VerifyEmail', {
+        email: result.user.email,
+        emailSent: result.verificationEmailSent,
+      });
     } catch (error: any) {
       Alert.alert('Registration failed', error?.data?.message || 'Unable to create account. Please try again.');
     }
   };
 
   return (
-    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <View style={styles.brandMark}>
           <Wallet size={27} color="#FFFFFF" strokeWidth={2} />

@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { BarChart3, CircleDollarSign, Clock3, MailPlus, Pencil, Plus, Receipt, Trash2, Users, Wallet } from 'lucide-react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
@@ -50,6 +50,7 @@ function ExpenseRow({
   members,
   userId,
   expanded,
+  isDeleting,
   onPress,
   onEdit,
   onDelete,
@@ -59,6 +60,7 @@ function ExpenseRow({
   members: { id: string; name: string }[];
   userId?: string;
   expanded: boolean;
+  isDeleting: boolean;
   onPress: () => void;
   onEdit: () => void;
   onDelete: () => void;
@@ -92,13 +94,21 @@ function ExpenseRow({
       ) : null}
       {expense.status !== 'CANCELLED' ? (
         <View style={styles.expenseActions}>
-          <Pressable onPress={onEdit} style={styles.expenseAction} accessibilityRole="button">
+          <Pressable onPress={onEdit} style={[styles.expenseAction, isDeleting && styles.disabled]} disabled={isDeleting} accessibilityRole="button">
             <Pencil size={15} color={colors.primaryDark} />
             <Text style={styles.expenseActionText}>Edit</Text>
           </Pressable>
-          <Pressable onPress={onDelete} style={styles.expenseAction} accessibilityRole="button">
-            <Trash2 size={15} color={colors.danger} />
-            <Text style={[styles.expenseActionText, styles.deleteText]}>Delete</Text>
+          <Pressable
+            onPress={onDelete}
+            style={[styles.expenseAction, isDeleting && styles.disabled]}
+            disabled={isDeleting}
+            accessibilityRole="button"
+            accessibilityState={{ busy: isDeleting, disabled: isDeleting }}
+          >
+            {isDeleting
+              ? <ActivityIndicator size="small" color={colors.danger} />
+              : <Trash2 size={15} color={colors.danger} />}
+            <Text style={[styles.expenseActionText, styles.deleteText]}>{isDeleting ? 'Deleting…' : 'Delete'}</Text>
           </Pressable>
         </View>
       ) : null}
@@ -121,12 +131,17 @@ export default function GroupDetailsScreen({ route, navigation }: Props) {
   const { data: group, isLoading: groupLoading, isError: groupError, refetch: refetchGroup } = useGetGroupDetailsQuery(groupId);
   const { data: expenses = [], isLoading: expensesLoading, isError: expensesError, refetch: refetchExpenses } = useGetGroupExpensesQuery(groupId);
   const { data: activities = [], isLoading: activitiesLoading, isError: activitiesError, refetch: refetchActivities } = useGetGroupActivitiesQuery(groupId);
-  const { data: balances = [], isLoading: balancesLoading, isError: balancesError } = useGetGroupBalancesQuery({ groupId });
+  const {
+    data: balances = [],
+    isLoading: balancesLoading,
+    isError: balancesError,
+    refetch: refetchBalances,
+  } = useGetGroupBalancesQuery({ groupId });
   const { data: user } = useGetCurrentUserQuery();
   const { data: debts = [], isLoading: debtsLoading, isError: debtsError, refetch: refetchDebts } =
     useGetSimplifiedDebtsQuery(groupId, { skip: !showSettleUp });
   const [createSettlement, { isLoading: settling }] = useCreateSettlementMutation();
-  const [deleteExpense] = useDeleteExpenseMutation();
+  const [deleteExpense, { isLoading: isDeletingExpense, originalArgs: deletingExpenseArgs }] = useDeleteExpenseMutation();
   const members = useMemo(
     () => group?.members.map(member => ({ id: member.user.id, name: member.user.name || member.user.email })) ?? [],
     [group],
@@ -151,10 +166,8 @@ export default function GroupDetailsScreen({ route, navigation }: Props) {
   );
   const currentBalance = balances.find(balance => balance.userId === user?.id);
   const totalMinor = expenses.reduce((total, expense) => total + expense.totalMinor, 0);
-  const outgoingDebts = debts.filter(debt => debt.fromUserId === user?.id);
-
   const settleDebt = async (debt: typeof debts[number]) => {
-    if (!user) return;
+    if (!user || debt.fromUserId !== user.id) return;
     setSettlementError('');
     try {
       await createSettlement({
@@ -216,6 +229,7 @@ export default function GroupDetailsScreen({ route, navigation }: Props) {
         members={members}
         userId={user?.id}
         expanded={expandedExpenseId === expense.id}
+        isDeleting={isDeletingExpense && deletingExpenseArgs?.expenseId === expense.id}
         onPress={() => setExpandedExpenseId(current => current === expense.id ? null : expense.id)}
         onEdit={() => navigation.navigate('AddExpense', { groupId, expenseId: expense.id })}
         onDelete={() => confirmDeleteExpense(expense)}
@@ -262,29 +276,87 @@ export default function GroupDetailsScreen({ route, navigation }: Props) {
       {showSettleUp ? (
         <View style={styles.settlePanel}>
           <Text style={styles.sectionTitle}>Settle your group balances</Text>
-          <Text style={styles.settleHint}>Payments are recorded as completed and update this group’s balance.</Text>
+          <Text style={styles.settleHint}>Review every member’s balance, the expenses behind it, and the payments needed to settle the group.</Text>
+          <SectionHeading title="Payment plan" action={`${debts.length} payments`} />
           {debtsLoading ? <LoadingIndicator /> : debtsError ? (
             <>
               <EmptyState message="Could not load your settlement options." />
               <Pressable onPress={refetchDebts} style={styles.retry}><Text style={styles.retryText}>Retry</Text></Pressable>
             </>
-          ) : outgoingDebts.length === 0 ? <EmptyState message="You have no outstanding payments in this group." /> : outgoingDebts.map(debt => (
-            <View key={debt.toUserId} style={styles.debtRow}>
-              <View style={styles.debtCopy}>
-                <Text style={styles.expenseTitle}>Pay {members.find(member => member.id === debt.toUserId)?.name ?? 'group member'}</Text>
-                <Text style={styles.expenseMeta}>{money(debt.amountMinor, group.currency)}</Text>
+          ) : debts.length === 0 ? <EmptyState message="All group balances are settled." /> : debts.map((debt, index) => {
+            const isMyPayment = debt.fromUserId === user?.id;
+            return (
+              <View key={`${debt.fromUserId}-${debt.toUserId}-${index}`} style={styles.debtRow}>
+                <View style={styles.debtCopy}>
+                  <Text style={styles.expenseTitle}>
+                    {members.find(member => member.id === debt.fromUserId)?.name ?? 'Group member'}
+                    {' pays '}
+                    {members.find(member => member.id === debt.toUserId)?.name ?? 'group member'}
+                  </Text>
+                  <Text style={styles.expenseMeta}>{money(debt.amountMinor, group.currency)}{isMyPayment ? ' · Your payment' : ''}</Text>
+                </View>
+                {isMyPayment ? (
+                  <Pressable
+                    style={[styles.payButton, settling && styles.disabled]}
+                    disabled={settling}
+                    onPress={() => settleDebt(debt)}
+                    accessibilityRole="button"
+                  >
+                    <Text style={styles.payButtonText}>{settling ? 'Recording…' : 'Mark paid'}</Text>
+                  </Pressable>
+                ) : null}
               </View>
-              <Pressable
-                style={[styles.payButton, settling && styles.disabled]}
-                disabled={settling}
-                onPress={() => settleDebt(debt)}
-                accessibilityRole="button"
-              >
-                <Text style={styles.payButtonText}>{settling ? 'Recording…' : 'Mark paid'}</Text>
-              </Pressable>
-            </View>
-          ))}
+            );
+          })}
           {settlementError ? <Text style={styles.error}>{settlementError}</Text> : null}
+
+          <SectionHeading title="Member balances" action={`${group.members.length} members`} />
+          {balancesLoading ? <LoadingIndicator /> : balancesError ? (
+            <>
+              <EmptyState message="Could not load member balances." />
+              <Pressable onPress={refetchBalances} style={styles.retry}><Text style={styles.retryText}>Retry</Text></Pressable>
+            </>
+          ) : group.members.map(member => {
+            const balance = balances.find(item => item.userId === member.user.id);
+            const netMinor = balance?.netMinor ?? 0;
+            return (
+              <View key={member.user.id} style={styles.memberBalanceRow}>
+                <View style={styles.debtCopy}>
+                  <Text style={styles.expenseTitle}>
+                    {member.user.name || member.user.email}{member.user.id === user?.id ? ' · You' : ''}
+                  </Text>
+                  <Text style={styles.expenseMeta}>
+                    Paid {money(balance?.paidMinor ?? 0, group.currency)} · Share {money(balance?.owesMinor ?? 0, group.currency)}
+                  </Text>
+                  <Text style={styles.expenseMeta}>
+                    Sent {money(balance?.settlementsSentMinor ?? 0, group.currency)} · Received {money(balance?.settlementsReceivedMinor ?? 0, group.currency)}
+                  </Text>
+                </View>
+                <View style={styles.memberBalanceAmount}>
+                  <Text style={[styles.expenseTotal, netMinor < 0 && styles.negative]}>
+                    {netMinor === 0 ? 'Settled' : money(Math.abs(netMinor), group.currency)}
+                  </Text>
+                  <Text style={styles.expenseMeta}>{netMinor < 0 ? 'Owes' : netMinor > 0 ? 'Is owed' : 'All clear'}</Text>
+                </View>
+              </View>
+            );
+          })}
+
+          <SectionHeading title="Expenses in this group" action={`${expenses.length} total`} />
+          {expensesLoading ? <LoadingIndicator /> : expensesError ? (
+            <>
+              <EmptyState message="Could not load the group expenses." />
+              <Pressable onPress={refetchExpenses} style={styles.retry}><Text style={styles.retryText}>Retry</Text></Pressable>
+            </>
+          ) : showExpenseList(expenses)}
+
+          <SectionHeading title="Settlement history" action="" />
+          {activitiesLoading ? <LoadingIndicator /> : activitiesError ? (
+            <>
+              <EmptyState message="Could not load settlement history." />
+              <Pressable onPress={refetchActivities} style={styles.retry}><Text style={styles.retryText}>Retry</Text></Pressable>
+            </>
+          ) : showActivity(activities.filter(activity => activity.type === 'SETTLEMENT'))}
         </View>
       ) : null}
       <View style={styles.tabs}>
@@ -455,6 +527,8 @@ const styles = StyleSheet.create({
   quickAction: { flex: 1, minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, borderRadius: 14, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
   settlePanel: { padding: 14, marginBottom: 15, borderRadius: 15, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
   settleHint: { color: colors.muted, fontSize: 12, lineHeight: 18, marginTop: 5, marginBottom: 9 },
+  memberBalanceRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderTopWidth: 1, borderTopColor: colors.border },
+  memberBalanceAmount: { alignItems: 'flex-end', marginLeft: 8 },
   debtRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderTopWidth: 1, borderTopColor: colors.border },
   debtCopy: { flex: 1 },
   payButton: { paddingHorizontal: 12, paddingVertical: 9, borderRadius: 11, backgroundColor: colors.primaryLight },

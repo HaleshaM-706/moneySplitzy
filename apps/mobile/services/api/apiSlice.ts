@@ -5,6 +5,8 @@ import type {
   UserDTO,
   AuthResponseDTO,
   RegisterDTO,
+  RegistrationResponseDTO,
+  ResendVerificationDTO,
   LoginDTO,
   GroupDTO,
   GroupDetailsDTO,
@@ -28,9 +30,12 @@ export const apiSlice = createApi({
   baseQuery: axiosBaseQuery({ baseUrl: API_BASE_URL }),
   tagTypes: ['Auth', 'Groups', 'Expenses', 'Balances', 'Settlements', 'Dashboard', 'GroupActivities'],
   endpoints: builder => ({
-    register: builder.mutation<AuthResponseDTO, RegisterDTO>({
+    register: builder.mutation<RegistrationResponseDTO, RegisterDTO>({
       query: creds => ({ url: '/auth/register', method: 'POST', data: creds }),
       invalidatesTags: ['Auth'],
+    }),
+    resendVerification: builder.mutation<ResendVerificationDTO, { email: string }>({
+      query: body => ({ url: '/auth/resend-verification', method: 'POST', data: body }),
     }),
     login: builder.mutation<AuthResponseDTO, LoginDTO>({
       query: creds => ({ url: '/auth/login', method: 'POST', data: creds }),
@@ -158,6 +163,7 @@ export const apiSlice = createApi({
 
 export const {
   useRegisterMutation,
+  useResendVerificationMutation,
   useLoginMutation,
   useLogoutMutation,
   useGetCurrentUserQuery,

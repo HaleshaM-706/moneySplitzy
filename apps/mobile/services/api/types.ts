@@ -10,6 +10,15 @@ export type RegisterDTO = {
   password: string;
 };
 
+export type RegistrationResponseDTO = {
+  user: UserDTO;
+  verificationEmailSent: boolean;
+};
+
+export type ResendVerificationDTO = {
+  message: string;
+};
+
 export type LoginDTO = {
   email: string;
   password: string;

@@ -17,13 +17,9 @@ export default function ProfileScreen() {
   const [logout, { isLoading: isLoggingOut }] = useLogoutMutation();
 
   const handleLogout = async () => {
-    let logoutFailed = false;
     let storageFailed = false;
-    try {
-      await logout({ refreshToken }).unwrap();
-    } catch {
-      logoutFailed = true;
-    }
+    const logoutRequest = logout({ refreshToken });
+
     try {
       await clearAuthSession();
     } catch {
@@ -34,12 +30,16 @@ export default function ProfileScreen() {
 
     if (storageFailed) {
       Alert.alert('Sign-out incomplete', 'Could not remove the saved session from secure storage. Please try again.');
-    } else if (logoutFailed) {
-      Alert.alert(
-        'Signed out',
-        'Your session was removed from this device, but the server could not confirm that it was revoked.',
-      );
     }
+
+    logoutRequest.unwrap().catch(() => {
+      if (!storageFailed) {
+        Alert.alert(
+          'Signed out',
+          'Your session was removed from this device, but the server could not confirm that it was revoked.',
+        );
+      }
+    });
   };
 
   return (

@@ -25,6 +25,7 @@ paths:
     post:
       tags: [Authentication]
       summary: Register a user
+      description: Creates an unverified account and sends a 24-hour email verification link. Login is unavailable until the link is confirmed.
       security: []
       requestBody:
         required: true
@@ -34,19 +35,90 @@ paths:
               $ref: '#/components/schemas/RegisterRequest'
       responses:
         '201':
-          description: User registered and token pair issued
+          description: Account created; the response indicates whether the verification email was sent
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AuthResponse'
+                $ref: '#/components/schemas/RegistrationResponse'
         '400':
           $ref: '#/components/responses/BadRequest'
         '409':
           description: Email is already registered
+  /auth/resend-verification:
+    post:
+      tags: [Authentication]
+      summary: Resend an email verification link
+      description: Returns the same message whether or not an unverified account exists. Resends are limited to one per minute per account.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResendVerificationRequest'
+      responses:
+        '200':
+          description: Generic response that does not disclose account existence
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '503':
+          description: Email delivery is unavailable
+  /auth/verify-email:
+    get:
+      tags: [Authentication]
+      summary: Open an email verification link
+      description: Displays a confirmation page; opening the link alone does not verify the address.
+      security: []
+      parameters:
+        - in: query
+          name: token
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Confirmation page
+          content:
+            text/html:
+              schema:
+                type: string
+        '400':
+          description: Invalid verification link
+          content:
+            text/html:
+              schema:
+                type: string
+  /auth/verify-email/confirm:
+    post:
+      tags: [Authentication]
+      summary: Confirm an email verification link
+      security: []
+      parameters:
+        - in: query
+          name: token
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Verification result page
+          content:
+            text/html:
+              schema:
+                type: string
+        '400':
+          description: Invalid, expired, or already used link
+          content:
+            text/html:
+              schema:
+                type: string
   /auth/login:
     post:
       tags: [Authentication]
       summary: Log in
+      description: Only accounts with a verified email address can sign in.
       security: []
       requestBody:
         required: true
@@ -826,6 +898,29 @@ components:
         password:
           type: string
           minLength: 8
+    RegistrationResponse:
+      type: object
+      required: [user, verificationEmailSent]
+      properties:
+        user:
+          $ref: '#/components/schemas/User'
+        verificationEmailSent:
+          type: boolean
+          description: False when the account was created but the verification email could not be delivered
+    ResendVerificationRequest:
+      type: object
+      additionalProperties: false
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+    MessageResponse:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
     LoginRequest:
       type: object
       additionalProperties: false

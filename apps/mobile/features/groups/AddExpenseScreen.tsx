@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Check, CircleDollarSign } from 'lucide-react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
@@ -327,7 +327,17 @@ export default function AddExpenseScreen({ route, navigation }: Props) {
         style={styles.notesInput}
       />
       {formError ? <Text style={styles.error}>{formError}</Text> : null}
-      {saving || updating ? <LoadingIndicator /> : null}
+      {updating ? (
+        <View style={styles.savingIndicator} accessibilityRole="progressbar">
+          <ActivityIndicator size="small" color={colors.primary} />
+          <Text style={styles.savingText}>Updating expense…</Text>
+        </View>
+      ) : saving ? (
+        <View style={styles.savingIndicator} accessibilityRole="progressbar">
+          <ActivityIndicator size="small" color={colors.primary} />
+          <Text style={styles.savingText}>Saving expense…</Text>
+        </View>
+      ) : null}
       <PrimaryButton
         title={saving || updating ? (expenseId ? 'Saving changes...' : 'Saving expense...') : (expenseId ? 'Save changes' : 'Save expense')}
         onPress={submit}
@@ -361,6 +371,8 @@ const styles = StyleSheet.create({
   splitInput: { width: 125, minHeight: 42, marginBottom: 0 },
   notesInput: { minHeight: 78, textAlignVertical: 'top' },
   error: { color: colors.danger, fontSize: 13, marginBottom: 12 },
+  savingIndicator: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9, marginBottom: 12 },
+  savingText: { color: colors.primaryDark, fontSize: 13, fontWeight: '700' },
   retry: { alignSelf: 'center', paddingVertical: 12, paddingHorizontal: 20 },
   retryText: { color: colors.primaryDark, fontSize: 14, fontWeight: '700' },
 });

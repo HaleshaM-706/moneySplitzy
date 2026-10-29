@@ -43,6 +43,7 @@ model User {
   id           String   @id @default(uuid())
   name         String?
   email        String   @unique
+  emailVerifiedAt DateTime?
   phone        String?
   passwordHash String
   createdAt    DateTime @default(now())
@@ -57,9 +58,20 @@ model User {
   settlementsTo   Settlement[] @relation("toUser")
   notifications Notification[]
   refreshTokens RefreshToken[]
+  emailVerificationToken EmailVerificationToken?
   idempotencyKeys IdempotencyKey[]
 
   @@index([email])
+}
+
+model EmailVerificationToken {
+  id         String   @id @default(uuid())
+  tokenHash  String   @unique
+  userId     String   @unique
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt  DateTime
+  lastSentAt DateTime?
+  createdAt  DateTime @default(now())
 }
 
 model Group {
