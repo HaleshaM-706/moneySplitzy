@@ -63,4 +63,13 @@ describe('EmailService', () => {
       service.sendVerificationEmail('person@example.com', 'Person', 'a'.repeat(43)),
     ).rejects.toBeInstanceOf(ServiceUnavailableException);
   });
+
+  it('identifies missing email configuration without exposing values', async () => {
+    delete process.env.EMAIL_FROM;
+
+    await expect(
+      service.sendVerificationEmail('person@example.com', 'Person', 'a'.repeat(43)),
+    ).rejects.toThrow('Email verification is not configured. Missing: EMAIL_FROM.');
+    expect(fetchRequest).not.toHaveBeenCalled();
+  });
 });

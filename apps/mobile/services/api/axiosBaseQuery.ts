@@ -87,7 +87,7 @@ export const axiosBaseQuery = ({ baseUrl }: { baseUrl: string } = { baseUrl: '' 
       }
 
       const status = axiosError.response.status;
-      if (status === 401) {
+      if (status === 401 && url !== '/auth/login') {
         const newToken = await refreshToken(api.getState as () => RootState, api.dispatch);
         if (newToken) {
           try {

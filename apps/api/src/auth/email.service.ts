@@ -21,8 +21,17 @@ export class EmailService {
     const apiKey = process.env.RESEND_API_KEY;
     const from = process.env.EMAIL_FROM;
     const publicApiUrl = process.env.API_PUBLIC_URL;
-    if (!apiKey || !from || !publicApiUrl) {
-      throw new ServiceUnavailableException('Email verification is not configured.');
+    if (!apiKey?.trim() || !from?.trim() || !publicApiUrl?.trim()) {
+      const missingConfiguration = [
+        { name: 'RESEND_API_KEY', value: apiKey },
+        { name: 'EMAIL_FROM', value: from },
+        { name: 'API_PUBLIC_URL', value: publicApiUrl },
+      ]
+        .filter(({ value }) => !value?.trim())
+        .map(({ name }) => name);
+      throw new ServiceUnavailableException(
+        `Email verification is not configured. Missing: ${missingConfiguration.join(', ')}.`,
+      );
     }
 
     let verificationUrl: URL;
@@ -40,6 +49,7 @@ export class EmailService {
 
     const safeName = escapeHtml(name);
     const url = verificationUrl.toString();
+
     let response: Response;
     try {
       response = await fetch('https://api.resend.com/emails', {

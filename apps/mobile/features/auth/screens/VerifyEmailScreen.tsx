@@ -7,16 +7,18 @@ import { colors, spacing } from '../../../shared/theme';
 
 type Props = {
   navigation: any;
-  route: { params: { email: string; emailSent: boolean } };
+  route: { params: { email: string; emailSent?: boolean } };
 };
 
 export default function VerifyEmailScreen({ navigation, route }: Props) {
   const { email, emailSent } = route.params;
   const [resendVerification, { isLoading }] = useResendVerificationMutation();
   const [message, setMessage] = useState(
-    emailSent
+    emailSent === true
       ? 'We sent you a verification link. Open it to confirm your email address.'
-      : 'Your account was created, but we could not send the verification email. Please try again.',
+      : emailSent === false
+        ? 'Your account was created, but we could not send the verification email. Please try again.'
+        : 'Your email address is not verified. Check your inbox, or request a new verification link below.',
   );
 
   const onResend = async () => {

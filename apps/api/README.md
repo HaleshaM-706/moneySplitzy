@@ -14,6 +14,20 @@ pnpm install
 pnpm dev:api
 ```
 
+## Email verification configuration
+
+Set these variables in the API process environment for local development and
+in the hosting provider's environment settings for deployments:
+
+- `RESEND_API_KEY`: API key for the Resend account.
+- `EMAIL_FROM`: sender address on a domain verified with Resend.
+- `API_PUBLIC_URL`: public HTTPS base URL for this API (localhost HTTP is
+  allowed for local development).
+
+The API does not include these values in the repository. If any are missing,
+the register/resend verification endpoint returns `503` and lists the missing
+variable names. Restart or redeploy the API after changing its environment.
+
 DB commands (root):
 
 ```bash

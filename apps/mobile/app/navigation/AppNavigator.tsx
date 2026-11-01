@@ -29,7 +29,7 @@ export type RootStackParamList = {
   Splash: undefined;
   Login: undefined;
   Register: undefined;
-  VerifyEmail: { email: string; emailSent: boolean };
+  VerifyEmail: { email: string; emailSent?: boolean };
   Main: NavigatorScreenParams<MainTabParamList> | undefined;
   CreateGroup: undefined;
   GroupDetails: { groupId: string };

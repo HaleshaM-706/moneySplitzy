@@ -62,6 +62,20 @@ export default function LoginScreen({ navigation }: any) {
       await saveAuthSession(result);
       dispatch(setCredentials({ token: result.access, refreshToken: result.refresh, user: result.user }));
     } catch (error) {
+      if (
+        typeof error === 'object' &&
+        error !== null &&
+        'status' in error &&
+        error.status === 401 &&
+        'data' in error &&
+        typeof error.data === 'object' &&
+        error.data !== null &&
+        'message' in error.data &&
+        error.data.message === 'Please verify your email address before logging in.'
+      ) {
+        navigation.replace('VerifyEmail', { email: data.email.trim().toLowerCase() });
+        return;
+      }
       Alert.alert('Login failed', getLoginErrorMessage(error));
     }
   };
