@@ -64,6 +64,7 @@ export class SettlementsController {
       ...body,
       currency: body.currency ?? membership.group.currency,
       actorUserId: req.user.id,
+      actorIsAdmin: membership.role === 'ADMIN',
       idempotencyKey,
     });
   }

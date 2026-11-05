@@ -128,6 +128,7 @@ export default function GroupDetailsScreen({ route, navigation }: Props) {
   const [expandedExpenseId, setExpandedExpenseId] = useState<string | null>(null);
   const [showSettleUp, setShowSettleUp] = useState(false);
   const [settlementError, setSettlementError] = useState('');
+  const [settlingDebtKey, setSettlingDebtKey] = useState<string | null>(null);
   const { data: group, isLoading: groupLoading, isError: groupError, refetch: refetchGroup } = useGetGroupDetailsQuery(groupId);
   const { data: expenses = [], isLoading: expensesLoading, isError: expensesError, refetch: refetchExpenses } = useGetGroupExpensesQuery(groupId);
   const { data: activities = [], isLoading: activitiesLoading, isError: activitiesError, refetch: refetchActivities } = useGetGroupActivitiesQuery(groupId);
@@ -140,7 +141,7 @@ export default function GroupDetailsScreen({ route, navigation }: Props) {
   const { data: user } = useGetCurrentUserQuery();
   const { data: debts = [], isLoading: debtsLoading, isError: debtsError, refetch: refetchDebts } =
     useGetSimplifiedDebtsQuery(groupId, { skip: !showSettleUp });
-  const [createSettlement, { isLoading: settling }] = useCreateSettlementMutation();
+  const [createSettlement] = useCreateSettlementMutation();
   const [deleteExpense, { isLoading: isDeletingExpense, originalArgs: deletingExpenseArgs }] = useDeleteExpenseMutation();
   const members = useMemo(
     () => group?.members.map(member => ({ id: member.user.id, name: member.user.name || member.user.email })) ?? [],
@@ -165,22 +166,30 @@ export default function GroupDetailsScreen({ route, navigation }: Props) {
     [activities, activityFilter],
   );
   const currentBalance = balances.find(balance => balance.userId === user?.id);
+  const isGroupAdmin = group?.members.some(
+    member => member.user.id === user?.id && member.role === 'ADMIN',
+  ) ?? false;
   const totalMinor = expenses.reduce((total, expense) => total + expense.totalMinor, 0);
   const settleDebt = async (debt: typeof debts[number]) => {
-    if (!user || debt.fromUserId !== user.id) return;
+    if (!user || (debt.fromUserId !== user.id && !isGroupAdmin)) return;
+    const debtKey = `${debt.fromUserId}-${debt.toUserId}`;
     setSettlementError('');
+    setSettlingDebtKey(debtKey);
     try {
       await createSettlement({
         payload: {
           groupId,
-          fromUserId: user.id,
+          fromUserId: debt.fromUserId,
           toUserId: debt.toUserId,
           amountMinor: debt.amountMinor,
           currency: group?.currency,
         },
       }).unwrap();
+      await refetchDebts();
     } catch {
       setSettlementError('Could not record this settlement. Please try again.');
+    } finally {
+      setSettlingDebtKey(null);
     }
   };
 
@@ -285,6 +294,9 @@ export default function GroupDetailsScreen({ route, navigation }: Props) {
             </>
           ) : debts.length === 0 ? <EmptyState message="All group balances are settled." /> : debts.map((debt, index) => {
             const isMyPayment = debt.fromUserId === user?.id;
+            const canRecordPayment = isMyPayment || isGroupAdmin;
+            const debtKey = `${debt.fromUserId}-${debt.toUserId}`;
+            const isRecording = settlingDebtKey === debtKey;
             return (
               <View key={`${debt.fromUserId}-${debt.toUserId}-${index}`} style={styles.debtRow}>
                 <View style={styles.debtCopy}>
@@ -295,14 +307,16 @@ export default function GroupDetailsScreen({ route, navigation }: Props) {
                   </Text>
                   <Text style={styles.expenseMeta}>{money(debt.amountMinor, group.currency)}{isMyPayment ? ' · Your payment' : ''}</Text>
                 </View>
-                {isMyPayment ? (
+                {canRecordPayment ? (
                   <Pressable
-                    style={[styles.payButton, settling && styles.disabled]}
-                    disabled={settling}
+                    style={[styles.payButton, isRecording && styles.disabled]}
+                    disabled={settlingDebtKey !== null}
                     onPress={() => settleDebt(debt)}
                     accessibilityRole="button"
                   >
-                    <Text style={styles.payButtonText}>{settling ? 'Recording…' : 'Mark paid'}</Text>
+                    <Text style={styles.payButtonText}>
+                      {isRecording ? 'Recording…' : isMyPayment ? 'Mark paid' : 'Record payment'}
+                    </Text>
                   </Pressable>
                 ) : null}
               </View>

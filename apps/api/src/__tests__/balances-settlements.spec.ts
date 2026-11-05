@@ -1,6 +1,7 @@
 import { BalancesService } from '../balances/balances.service';
 import { DebtSimplificationService } from '../debt-simplification/debt-simplification.service';
 import { SettlementsService } from '../settlements/settlements.service';
+import { ForbiddenException } from '@nestjs/common';
 
 // simple mock PrismaService
 const makePrismaMock = (data: any) => ({
@@ -79,5 +80,32 @@ describe('Balances and Settlements complex scenario', () => {
     expect(settlement).toHaveProperty('id');
     // idempotency key should have been created through transaction
     expect(prisma.$transaction).toHaveBeenCalled();
+  });
+
+  it('allows a group admin to record a settlement for another member', async () => {
+    const prisma = makePrismaMock({ groupId: 'g1', members: ['payer', 'payee'], payments: [], splits: [], settlements: [], currency: 'INR' });
+    const svc = new SettlementsService(prisma as any);
+
+    await expect(svc.createSettlement({
+      groupId: 'g1',
+      fromUserId: 'payer',
+      toUserId: 'payee',
+      amountMinor: 100,
+      actorUserId: 'admin',
+      actorIsAdmin: true,
+    })).resolves.toHaveProperty('id');
+  });
+
+  it('does not allow a non-admin to record a settlement for another member', async () => {
+    const prisma = makePrismaMock({ groupId: 'g1', members: ['a', 'b'], payments: [], splits: [], settlements: [], currency: 'INR' });
+    const svc = new SettlementsService(prisma as any);
+
+    await expect(svc.createSettlement({
+      groupId: 'g1',
+      fromUserId: 'a',
+      toUserId: 'b',
+      amountMinor: 100,
+      actorUserId: 'c',
+    })).rejects.toBeInstanceOf(ForbiddenException);
   });
 });

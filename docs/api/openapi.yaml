@@ -456,9 +456,9 @@ paths:
       tags: [Balances and settlements]
       summary: Create a completed settlement
       description: |
-        `fromUserId` must be the authenticated user. Both parties must belong
-        to the group. Amounts are integer minor units. An optional
-        `Idempotency-Key` header prevents duplicate writes.
+        The authenticated user must be the paying user (`fromUserId`) or a group
+        admin. Both parties must belong to the group. Amounts are integer minor
+        units. An optional `Idempotency-Key` header prevents duplicate writes.
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:

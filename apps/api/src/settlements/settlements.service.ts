@@ -19,6 +19,7 @@ export class SettlementsService {
     currency?: string;
     idempotencyKey?: string;
     actorUserId?: string;
+    actorIsAdmin?: boolean;
   }) {
     const {
       groupId,
@@ -28,12 +29,13 @@ export class SettlementsService {
       currency = 'INR',
       idempotencyKey,
       actorUserId,
+      actorIsAdmin = false,
     } = options;
 
     if (fromUserId === toUserId) throw new BadRequestException('Cannot settle to self');
     if (amountMinor <= 0) throw new BadRequestException('Amount must be positive');
-    if (actorUserId && actorUserId !== fromUserId) {
-      throw new ForbiddenException('A settlement can only be created by the paying user');
+    if (actorUserId && actorUserId !== fromUserId && !actorIsAdmin) {
+      throw new ForbiddenException('Only the paying user or a group admin can create this settlement');
     }
 
     // verify users belong to group
