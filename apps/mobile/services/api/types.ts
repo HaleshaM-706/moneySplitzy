@@ -70,6 +70,7 @@ export type GroupInvitationDTO = {
   token: string;
   expiresAt?: string | null;
   createdAt: string;
+  emailSent: boolean;
 };
 
 export type AddExistingGroupMemberDTO = {

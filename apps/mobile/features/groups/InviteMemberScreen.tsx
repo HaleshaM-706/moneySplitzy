@@ -99,7 +99,7 @@ export default function InviteMemberScreen({ route, navigation }: Props) {
       <Text style={styles.helper}>
         {mode === 'existing'
           ? 'Add a registered user directly using the email on their account.'
-          : 'Create a shareable invite code for someone who does not have an account yet.'}
+          : 'Send an invitation email. They can sign in or create an account with this email, then enter the code to join.'}
       </Text>
       <Text style={styles.label}>Email address</Text>
       <AppTextInput
@@ -122,15 +122,19 @@ export default function InviteMemberScreen({ route, navigation }: Props) {
         </View>
       ) : invitation ? (
         <View style={styles.invitationCard}>
-          <Text style={styles.successTitle}>Invitation created</Text>
+          <Text style={styles.successTitle}>{invitation.emailSent ? 'Invitation sent' : 'Invitation created'}</Text>
           <Text style={styles.message}>
-            Share this invite code with {invitation.email}. They must sign in with that email and enter the code in the Groups tab to join.
+            {invitation.emailSent
+              ? `We sent an invitation to ${invitation.email}. They must sign in with that email and enter the code in the Groups tab to join.`
+              : `The invitation email could not be sent to ${invitation.email}. Share this code with them directly; they must sign in with that email and enter it in the Groups tab to join.`}
           </Text>
           <Text selectable style={styles.token}>{invitation.token}</Text>
           {invitation.expiresAt ? (
             <Text style={styles.expiry}>Expires {new Date(invitation.expiresAt).toLocaleString()}</Text>
           ) : null}
-          <Text style={styles.note}>The app does not send invitation emails automatically; share the code directly.</Text>
+          {invitation.emailSent ? null : (
+            <Text style={styles.note}>Configure the API email settings to send invitations automatically.</Text>
+          )}
         </View>
       ) : (
         <PrimaryButton

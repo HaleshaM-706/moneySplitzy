@@ -4,16 +4,19 @@ import {
   Controller,
   ForbiddenException,
   Get,
+  Logger,
   NotFoundException,
   Param,
   ParseUUIDPipe,
   Post,
   Req,
+  ServiceUnavailableException,
   UseGuards,
 } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../common/prisma.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { EmailService } from '../auth/email.service';
 import { IsEmail, IsOptional, IsString, Length, Matches, MaxLength } from 'class-validator';
 
 class CreateGroupDto {
@@ -50,7 +53,12 @@ class InviteGroupMemberDto {
 @Controller('groups')
 @UseGuards(JwtAuthGuard)
 export class GroupsController {
-  constructor(private prisma: PrismaService) {}
+  private readonly logger = new Logger(GroupsController.name);
+
+  constructor(
+    private prisma: PrismaService,
+    private email: EmailService,
+  ) {}
 
   @Post()
   async create(@Req() req: any, @Body() body: CreateGroupDto) {
@@ -268,16 +276,41 @@ export class GroupsController {
     }
 
     const token = randomUUID();
-    return this.prisma.groupInvitation.create({
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    const { group, ...invitation } = await this.prisma.groupInvitation.create({
       data: {
         groupId,
-        email: body.email.toLowerCase(),
+        email: body.email.trim().toLowerCase(),
         invitedBy: req.user.id,
         token,
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        expiresAt,
       },
-      select: { id: true, groupId: true, email: true, token: true, expiresAt: true, createdAt: true },
+      select: {
+        id: true,
+        groupId: true,
+        email: true,
+        token: true,
+        expiresAt: true,
+        createdAt: true,
+        group: { select: { name: true } },
+      },
     });
+
+    let emailSent = true;
+    try {
+      await this.email.sendGroupInvitationEmail(
+        invitation.email,
+        group.name,
+        invitation.token,
+        expiresAt,
+      );
+    } catch (error) {
+      if (!(error instanceof ServiceUnavailableException)) throw error;
+      emailSent = false;
+      this.logger.error('Group invitation was created, but its email could not be sent.', error);
+    }
+
+    return { ...invitation, emailSent };
   }
 
   @Post(':groupId/members')

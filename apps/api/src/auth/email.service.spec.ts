@@ -64,6 +64,39 @@ describe('EmailService', () => {
     ).rejects.toBeInstanceOf(ServiceUnavailableException);
   });
 
+  it('sends a group invitation with an escaped group name and the invite code', async () => {
+    delete process.env.API_PUBLIC_URL;
+    const expiresAt = new Date('2026-11-12T00:00:00.000Z');
+
+    await service.sendGroupInvitationEmail(
+      'person@example.com',
+      '<Trip & Friends>',
+      'invite-code',
+      expiresAt,
+    );
+
+    const requestBody = JSON.parse(fetchRequest.mock.calls[0][1].body);
+    expect(requestBody.to).toEqual(['person@example.com']);
+    expect(requestBody.subject).toBe("You're invited to join a group on Money Splitzy");
+    expect(requestBody.html).toContain('&lt;Trip &amp; Friends&gt;');
+    expect(requestBody.html).toContain('invite-code');
+    expect(requestBody.text).toContain(expiresAt.toISOString());
+  });
+
+  it('reports missing Resend configuration for group invitations', async () => {
+    delete process.env.RESEND_API_KEY;
+
+    await expect(
+      service.sendGroupInvitationEmail(
+        'person@example.com',
+        'Trip',
+        'invite-code',
+        new Date(),
+      ),
+    ).rejects.toThrow('Group invitation email is not configured. Missing: RESEND_API_KEY.');
+    expect(fetchRequest).not.toHaveBeenCalled();
+  });
+
   it('identifies missing email configuration without exposing values', async () => {
     delete process.env.EMAIL_FROM;
 

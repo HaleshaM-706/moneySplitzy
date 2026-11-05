@@ -1,4 +1,4 @@
-import { NotFoundException } from '@nestjs/common';
+import { NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { GroupsController } from './groups.controller';
 
 describe('GroupsController', () => {
@@ -49,7 +49,7 @@ describe('GroupsController', () => {
         }]),
       },
     };
-    const controller = new GroupsController(prisma as any);
+    const controller = new GroupsController(prisma as any, {} as any);
 
     const result = await controller.list({ user: { id: 'user-1' } });
 
@@ -71,10 +71,87 @@ describe('GroupsController', () => {
       groupMember: { findUnique: jest.fn().mockResolvedValue(null) },
       group: { findUnique: jest.fn() },
     };
-    const controller = new GroupsController(prisma as any);
+    const controller = new GroupsController(prisma as any, {} as any);
 
     await expect(controller.activities({ user: { id: 'outsider' } }, 'private-group'))
       .rejects.toBeInstanceOf(NotFoundException);
     expect(prisma.group.findUnique).not.toHaveBeenCalled();
+  });
+
+  it('sends the invitation email and returns the invite code', async () => {
+    const expiresAt = new Date('2026-11-12T00:00:00.000Z');
+    const createdAt = new Date('2026-11-05T00:00:00.000Z');
+    const prisma = {
+      groupMember: { findUnique: jest.fn().mockResolvedValue({ role: 'ADMIN' }) },
+      groupInvitation: {
+        create: jest.fn().mockResolvedValue({
+          id: 'invitation-1',
+          groupId: 'group-1',
+          email: 'person@example.com',
+          token: 'invite-code',
+          expiresAt,
+          createdAt,
+          group: { name: 'Trip' },
+        }),
+      },
+    };
+    const email = { sendGroupInvitationEmail: jest.fn().mockResolvedValue(undefined) };
+    const controller = new GroupsController(prisma as any, email as any);
+
+    const result = await controller.invite(
+      { user: { id: 'admin-1' } },
+      'group-1',
+      { email: ' Person@Example.com ' },
+    );
+
+    expect(email.sendGroupInvitationEmail).toHaveBeenCalledWith(
+      'person@example.com',
+      'Trip',
+      'invite-code',
+      prisma.groupInvitation.create.mock.calls[0][0].data.expiresAt,
+    );
+    expect(result).toEqual({
+      id: 'invitation-1',
+      groupId: 'group-1',
+      email: 'person@example.com',
+      token: 'invite-code',
+      expiresAt,
+      createdAt,
+      emailSent: true,
+    });
+  });
+
+  it('keeps the invitation code available when email delivery is unavailable', async () => {
+    const prisma = {
+      groupMember: { findUnique: jest.fn().mockResolvedValue({ role: 'ADMIN' }) },
+      groupInvitation: {
+        create: jest.fn().mockResolvedValue({
+          id: 'invitation-1',
+          groupId: 'group-1',
+          email: 'person@example.com',
+          token: 'invite-code',
+          expiresAt: new Date('2026-11-12T00:00:00.000Z'),
+          createdAt: new Date('2026-11-05T00:00:00.000Z'),
+          group: { name: 'Trip' },
+        }),
+      },
+    };
+    const email = {
+      sendGroupInvitationEmail: jest.fn().mockRejectedValue(
+        new ServiceUnavailableException('Email is not configured'),
+      ),
+    };
+    const controller = new GroupsController(prisma as any, email as any);
+
+    const result = await controller.invite(
+      { user: { id: 'admin-1' } },
+      'group-1',
+      { email: 'person@example.com' },
+    );
+
+    expect(result).toEqual(expect.objectContaining({
+      token: 'invite-code',
+      emailSent: false,
+    }));
   });
 });

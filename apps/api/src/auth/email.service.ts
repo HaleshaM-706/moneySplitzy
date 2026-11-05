@@ -76,4 +76,53 @@ export class EmailService {
       throw new ServiceUnavailableException('Could not send the verification email. Please try again.');
     }
   }
+
+  async sendGroupInvitationEmail(
+    email: string,
+    groupName: string,
+    token: string,
+    expiresAt: Date,
+  ): Promise<void> {
+    const apiKey = process.env.RESEND_API_KEY;
+    const from = process.env.EMAIL_FROM;
+    if (!apiKey?.trim() || !from?.trim()) {
+      const missingConfiguration = [
+        { name: 'RESEND_API_KEY', value: apiKey },
+        { name: 'EMAIL_FROM', value: from },
+      ]
+        .filter(({ value }) => !value?.trim())
+        .map(({ name }) => name);
+      throw new ServiceUnavailableException(
+        `Group invitation email is not configured. Missing: ${missingConfiguration.join(', ')}.`,
+      );
+    }
+
+    const safeGroupName = escapeHtml(groupName);
+    const expiry = expiresAt.toISOString();
+    let response: Response;
+    try {
+      response = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          from,
+          to: [email],
+          subject: "You're invited to join a group on Money Splitzy",
+          html: `<p>You've been invited to join the group <strong>${safeGroupName}</strong> on Money Splitzy.</p><p>Sign in or create an account with this email address, then enter this invitation code in the app:</p><p><strong>${token}</strong></p><p>This invitation expires at ${expiry}.</p>`,
+          text: `You've been invited to join the group "${groupName}" on Money Splitzy.\n\nSign in or create an account with this email address, then enter this invitation code in the app:\n${token}\n\nThis invitation expires at ${expiry}.`,
+        }),
+      });
+    } catch (error) {
+      this.logger.error('Resend group invitation email request failed.', error);
+      throw new ServiceUnavailableException('Could not send the group invitation email. Please try again.');
+    }
+
+    if (!response.ok) {
+      this.logger.error(`Resend rejected the group invitation email with status ${response.status}.`);
+      throw new ServiceUnavailableException('Could not send the group invitation email. Please try again.');
+    }
+  }
 }

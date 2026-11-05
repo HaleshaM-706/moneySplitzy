@@ -280,7 +280,10 @@ paths:
     post:
       tags: [Groups]
       summary: Create a group invitation
-      description: Same operation as `POST /groups/{groupId}/members`.
+      description: |
+        Only group admins may create invitations. The API emails the invite code
+        when Resend is configured. If delivery fails, the invitation is still
+        created and `emailSent` is false so the code can be shared manually.
       requestBody:
         required: true
         content:
@@ -1075,7 +1078,7 @@ components:
           format: email
     GroupInvitation:
       type: object
-      required: [id, groupId, email, token, createdAt]
+      required: [id, groupId, email, token, createdAt, emailSent]
       properties:
         id:
           type: string
@@ -1097,6 +1100,8 @@ components:
         createdAt:
           type: string
           format: date-time
+        emailSent:
+          type: boolean
     ExpenseAllocation:
       type: object
       additionalProperties: false

@@ -24,9 +24,11 @@ in the hosting provider's environment settings for deployments:
 - `API_PUBLIC_URL`: public HTTPS base URL for this API (localhost HTTP is
   allowed for local development).
 
-The API does not include these values in the repository. If any are missing,
-the register/resend verification endpoint returns `503` and lists the missing
-variable names. Restart or redeploy the API after changing its environment.
+The API does not include these values in the repository. Registration and
+verification emails require all three settings. Group invitation emails require
+`RESEND_API_KEY` and `EMAIL_FROM`; if delivery is unavailable, the invitation
+code is still created and returned in the app so it can be shared manually.
+Restart or redeploy the API after changing its environment.
 
 DB commands (root):
 
