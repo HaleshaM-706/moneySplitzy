@@ -11,81 +11,131 @@ export class NotificationsService {
   constructor(private prisma: PrismaService) {
     try {
       if (!admin.apps.length) {
-        // initialize with application default credentials when available
         admin.initializeApp();
       }
       this.appInitialized = true;
-    } catch (e) {
-      logger.warn('Firebase Admin init failed; notifications disabled in this environment');
+    } catch (error) {
+      logger.warn(`Firebase Admin initialization failed; push notifications are disabled: ${String(error)}`);
     }
   }
 
-  // send notification to a user (safeguarded to avoid duplicates)
-  async notifyUser(userId: string, title: string, body: string, data?: any, dedupeKey?: string) {
+  async notifyUser(
+    userId: string,
+    title: string,
+    body: string,
+    data?: Record<string, string>,
+    dedupeKey?: string,
+  ) {
     const notificationData =
       data && typeof data === 'object' && !Array.isArray(data) ? data : {};
 
-    // prevent duplicate notifications by dedupe key
     if (dedupeKey) {
-      const existing = await this.prisma.notification.findFirst({ where: { data: { path: ['dedupe'], equals: dedupeKey } } });
+      const existing = await this.prisma.notification.findFirst({
+        where: {
+          userId,
+          data: { path: ['dedupe'], equals: dedupeKey },
+        },
+      });
       if (existing) return existing;
     }
 
-    // create DB record first
-    const record = await this.prisma.notification.create({ data: { userId, title, body, data: { ...notificationData, dedupe: dedupeKey } } });
+    const record = await this.prisma.notification.create({
+      data: {
+        userId,
+        title,
+        body,
+        data: { ...notificationData, ...(dedupeKey ? { dedupe: dedupeKey } : {}) },
+      },
+    });
 
     if (!this.appInitialized) return record;
 
-    // look up user's FCM tokens (assuming stored in RefreshToken or separate table; using Notification.user relation for demo)
-    // TODO: implement device token storage; here we attempt to load a user's profile field `fcmTokens` if exists
-    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
-    if (!user) return record;
-
     try {
-      // For demo: send a simple notification to topic of user
-      const message: admin.messaging.Message = {
-        topic: `user-${userId}`,
-        notification: { title, body },
-        data: data && typeof data === 'object' ? Object.fromEntries(Object.entries(data).map(([k, v]) => [k, String(v)])) : {}
-      };
+      const devices = await this.prisma.pushDeviceToken.findMany({
+        where: { userId },
+        select: { token: true },
+      });
+      if (devices.length === 0) return record;
 
-      // retry loop with limited attempts
-      const maxAttempts = 3;
-      let attempt = 0;
-      let sent = false;
-      while (attempt < maxAttempts && !sent) {
-        try {
-          attempt++;
-          await admin.messaging().send(message);
-          sent = true;
-        } catch (err) {
-          logger.warn(`FCM send attempt ${attempt} failed`);
-          if (attempt >= maxAttempts) logger.error('FCM send failed after retries', err as any);
-          // simple backoff
-          await new Promise(r => setTimeout(r, 100 * attempt));
-        }
+      const response = await admin.messaging().sendEachForMulticast({
+        tokens: devices.map(device => device.token),
+        notification: { title, body },
+        data: notificationData,
+      });
+
+      const invalidTokens = response.responses.flatMap((result, index) =>
+        !result.success &&
+        (result.error?.code === 'messaging/invalid-registration-token' ||
+          result.error?.code === 'messaging/registration-token-not-registered')
+          ? [devices[index].token]
+          : [],
+      );
+      if (invalidTokens.length > 0) {
+        await this.prisma.pushDeviceToken.deleteMany({
+          where: { token: { in: invalidTokens } },
+        });
       }
 
-      // mark record as sent in DB (store sent flag in data JSON)
       const storedData =
         record.data && typeof record.data === 'object' && !Array.isArray(record.data)
           ? record.data
           : {};
-      await this.prisma.notification.update({ where: { id: record.id }, data: { data: { ...storedData, sent: sent ? new Date().toISOString() : null } } });
+      await this.prisma.notification.update({
+        where: { id: record.id },
+        data: {
+          data: {
+            ...storedData,
+            pushSent: response.successCount,
+            pushFailed: response.failureCount,
+          },
+        },
+      });
 
-      // audit
-      await this.prisma.auditLog.create({ data: { actorUserId: userId, entityType: 'Notification', entityId: record.id, action: 'SEND', metadata: { title, body, sent } } });
-    } catch (e) {
-      logger.error('FCM send failed', e as any);
+      if (response.failureCount > 0) {
+        logger.warn(`Push delivery failed for ${response.failureCount} device(s) for notification ${record.id}.`);
+      }
+    } catch (error) {
+      logger.error(`Push delivery failed for notification ${record.id}.`, error);
     }
 
     return record;
   }
 
-  async notifyGroupMembers(groupId: string, title: string, body: string, data?: any) {
-    const members = await this.prisma.groupMember.findMany({ where: { groupId }, select: { userId: true } });
-    for (const m of members) {
-      await this.notifyUser(m.userId, title, body, data, `${groupId}-${title}-${body}`);
+  async notifyGroupMembers(
+    groupId: string,
+    title: string,
+    body: string,
+    data?: Record<string, string>,
+    dedupeKey?: string,
+    excludeUserId?: string,
+  ) {
+    let members;
+    try {
+      members = await this.prisma.groupMember.findMany({
+        where: { groupId },
+        select: { userId: true },
+      });
+    } catch (error) {
+      logger.error(`Could not find members to notify for group ${groupId}.`, error);
+      return;
+    }
+    const results = await Promise.allSettled(
+      members
+        .filter(member => member.userId !== excludeUserId)
+        .map(member =>
+          this.notifyUser(
+            member.userId,
+            title,
+            body,
+            data,
+            dedupeKey ? `${dedupeKey}-${member.userId}` : undefined,
+          ),
+        ),
+    );
+    for (const result of results) {
+      if (result.status === 'rejected') {
+        logger.error(`Could not create a group notification for group ${groupId}.`, result.reason);
+      }
     }
   }
 }

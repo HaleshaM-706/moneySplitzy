@@ -32,6 +32,7 @@ import {
 } from 'class-validator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PrismaService } from '../common/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 class ExpenseAllocationDto {
   @IsUUID()
@@ -97,7 +98,10 @@ class CreateExpenseWithGroupDto extends CreateExpenseDto {
 @Controller()
 @UseGuards(JwtAuthGuard)
 export class ExpensesController {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private notifications: NotificationsService,
+  ) {}
 
   @Post('expenses')
   async createWithGroup(@Req() req: any, @Body() body: CreateExpenseWithGroupDto) {
@@ -112,7 +116,7 @@ export class ExpensesController {
   ) {
     const member = await this.prisma.groupMember.findUnique({
       where: { groupId_userId: { groupId, userId: req.user.id } },
-      include: { group: { select: { currency: true } } },
+      include: { group: { select: { currency: true, name: true } } },
     });
     if (!member) throw new NotFoundException('Group not found');
     if (body.currency && body.currency !== member.group.currency) {
@@ -145,7 +149,7 @@ export class ExpensesController {
     }
 
     try {
-      return await this.prisma.$transaction(async tx => {
+      const expense = await this.prisma.$transaction(async tx => {
         const expense = await tx.expense.create({
           data: {
             groupId,
@@ -195,6 +199,15 @@ export class ExpensesController {
         });
         return expense;
       });
+      await this.notifications.notifyGroupMembers(
+        groupId,
+        'New group expense',
+        `A new expense was added to ${member.group.name}.`,
+        { type: 'expense', groupId, expenseId: expense.id },
+        `expense-${expense.id}`,
+        req.user.id,
+      );
+      return expense;
     } catch (error) {
       if (
         idempotencyKey &&

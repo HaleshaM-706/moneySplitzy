@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { BarChart3, CircleDollarSign, Clock3, MailPlus, Pencil, Plus, Receipt, Trash2, Users, Wallet } from 'lucide-react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -129,6 +129,8 @@ export default function GroupDetailsScreen({ route, navigation }: Props) {
   const [showSettleUp, setShowSettleUp] = useState(false);
   const [settlementError, setSettlementError] = useState('');
   const [settlingDebtKey, setSettlingDebtKey] = useState<string | null>(null);
+  const scrollViewRef = useRef<React.ElementRef<typeof ScrollView>>(null);
+  const scrollToOverviewRef = useRef(false);
   const { data: group, isLoading: groupLoading, isError: groupError, refetch: refetchGroup } = useGetGroupDetailsQuery(groupId);
   const { data: expenses = [], isLoading: expensesLoading, isError: expensesError, refetch: refetchExpenses } = useGetGroupExpensesQuery(groupId);
   const { data: activities = [], isLoading: activitiesLoading, isError: activitiesError, refetch: refetchActivities } = useGetGroupActivitiesQuery(groupId);
@@ -170,6 +172,11 @@ export default function GroupDetailsScreen({ route, navigation }: Props) {
     member => member.user.id === user?.id && member.role === 'ADMIN',
   ) ?? false;
   const totalMinor = expenses.reduce((total, expense) => total + expense.totalMinor, 0);
+  const showBalances = () => {
+    scrollToOverviewRef.current = true;
+    setShowSettleUp(false);
+    setSection('Overview');
+  };
   const settleDebt = async (debt: typeof debts[number]) => {
     if (!user || (debt.fromUserId !== user.id && !isGroupAdmin)) return;
     const debtKey = `${debt.fromUserId}-${debt.toUserId}`;
@@ -254,7 +261,12 @@ export default function GroupDetailsScreen({ route, navigation }: Props) {
     );
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+    <ScrollView
+      ref={scrollViewRef}
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      showsVerticalScrollIndicator={false}
+    >
       <View style={styles.topRow}>
         <BackButton onPress={() => navigation.goBack()} />
         <Pressable style={styles.switchButton} onPress={() => navigation.navigate('Main', { screen: 'Groups' })} accessibilityRole="button">
@@ -273,7 +285,7 @@ export default function GroupDetailsScreen({ route, navigation }: Props) {
         </Pressable>
       </View>
       <View style={styles.quickActions}>
-        <Pressable style={styles.quickAction} onPress={() => setSection('Overview')}>
+        <Pressable style={styles.quickAction} onPress={showBalances}>
           <BarChart3 size={16} color={colors.primaryDark} />
           <Text style={styles.secondaryActionText}>View balances</Text>
         </Pressable>
@@ -375,14 +387,30 @@ export default function GroupDetailsScreen({ route, navigation }: Props) {
       ) : null}
       <View style={styles.tabs}>
         {(['Overview', 'Expenses', 'Members', 'Activity'] as Section[]).map(item => (
-          <Pressable key={item} style={[styles.tab, section === item && styles.tabSelected]} onPress={() => setSection(item)}>
+          <Pressable
+            key={item}
+            style={[styles.tab, section === item && styles.tabSelected]}
+            onPress={() => {
+              setShowSettleUp(false);
+              setSection(item);
+            }}
+          >
             <Text style={[styles.tabText, section === item && styles.tabTextSelected]}>{item}</Text>
           </Pressable>
         ))}
       </View>
 
       {section === 'Overview' ? (
-        <>
+        <View
+          onLayout={event => {
+            if (!scrollToOverviewRef.current) return;
+            scrollToOverviewRef.current = false;
+            scrollViewRef.current?.scrollTo({
+              y: event.nativeEvent.layout.y,
+              animated: true,
+            });
+          }}
+        >
           {balancesLoading ? <LoadingIndicator /> : balancesError ? <EmptyState message="Could not load group balances." /> : null}
           <Text style={styles.sectionTitle}>Group summary</Text>
           <View style={styles.summaryGrid}>
@@ -402,7 +430,7 @@ export default function GroupDetailsScreen({ route, navigation }: Props) {
           {expensesLoading ? <LoadingIndicator /> : expensesError ? <EmptyState message="Could not load this group's expenses." /> : showExpenseList(expenses.slice(0, 3))}
           <SectionHeading title="Recent activity" action="View all" onPress={() => setSection('Activity')} />
           {activitiesLoading ? <LoadingIndicator /> : activitiesError ? <EmptyState message="Could not load this group's activity." /> : showActivity(activities.slice(0, 4))}
-        </>
+        </View>
       ) : null}
 
       {section === 'Expenses' ? (

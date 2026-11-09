@@ -1,16 +1,19 @@
 import {
   Controller,
+  Delete,
+  Body,
   Get,
   NotFoundException,
   Param,
   ParseUUIDPipe,
   Patch,
   Query,
+  Post,
   Req,
   UseGuards,
 } from '@nestjs/common';
 import { Type } from 'class-transformer';
-import { IsInt, IsOptional, Max, Min } from 'class-validator';
+import { IsIn, IsInt, IsOptional, IsString, Max, Min, MaxLength, MinLength } from 'class-validator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PrismaService } from '../common/prisma.service';
 
@@ -29,10 +32,46 @@ class NotificationQueryDto {
   pageSize = 50;
 }
 
+class RegisterPushDeviceDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(4096)
+  token: string;
+
+  @IsIn(['android', 'ios'])
+  platform: string;
+}
+
 @Controller('notifications')
 @UseGuards(JwtAuthGuard)
 export class NotificationsController {
   constructor(private prisma: PrismaService) {}
+
+  @Post('devices')
+  async registerDevice(@Req() req: any, @Body() body: RegisterPushDeviceDto) {
+    const device = await this.prisma.pushDeviceToken.upsert({
+      where: { token: body.token },
+      create: {
+        token: body.token,
+        platform: body.platform,
+        userId: req.user.id,
+      },
+      update: {
+        platform: body.platform,
+        userId: req.user.id,
+      },
+      select: { id: true },
+    });
+    return { registered: true, id: device.id };
+  }
+
+  @Delete('devices')
+  async unregisterDevice(@Req() req: any, @Body() body: RegisterPushDeviceDto) {
+    await this.prisma.pushDeviceToken.deleteMany({
+      where: { token: body.token, userId: req.user.id },
+    });
+    return { unregistered: true };
+  }
 
   @Get()
   async list(@Req() req: any, @Query() query: NotificationQueryDto) {

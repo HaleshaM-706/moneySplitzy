@@ -182,3 +182,13 @@ export type GroupActivityDTO = {
   createdAt: string;
   currency: string;
 };
+
+export type NotificationDTO = {
+  id: string;
+  userId: string;
+  title: string;
+  body?: string | null;
+  data?: Record<string, unknown> | null;
+  read: boolean;
+  createdAt: string;
+};

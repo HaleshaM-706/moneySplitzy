@@ -15,6 +15,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PrismaService } from '../common/prisma.service';
 import { DebtSimplificationService } from '../debt-simplification/debt-simplification.service';
 import { SettlementsService } from './settlements.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 class CreateSettlementDto {
   @IsUUID()
@@ -44,6 +45,7 @@ export class SettlementsController {
     private prisma: PrismaService,
     private settlements: SettlementsService,
     private debtSimplification: DebtSimplificationService,
+    private notifications: NotificationsService,
   ) {}
 
   @Post('settlements')
@@ -60,13 +62,22 @@ export class SettlementsController {
     if (idempotencyKey && (idempotencyKey.trim().length === 0 || idempotencyKey.length > 200)) {
       throw new BadRequestException('Idempotency-Key must contain 1 to 200 characters');
     }
-    return this.settlements.createSettlement({
+    const settlement = await this.settlements.createSettlement({
       ...body,
       currency: body.currency ?? membership.group.currency,
       actorUserId: req.user.id,
       actorIsAdmin: membership.role === 'ADMIN',
       idempotencyKey,
     });
+    await this.notifications.notifyGroupMembers(
+      body.groupId,
+      'Group settlement recorded',
+      'A payment was recorded toward settling group expenses.',
+      { type: 'settlement', groupId: body.groupId, settlementId: settlement.id },
+      `settlement-${settlement.id}`,
+      req.user.id,
+    );
+    return settlement;
   }
 
   @Get('groups/:groupId/settlements')

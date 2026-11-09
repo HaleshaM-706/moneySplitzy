@@ -594,6 +594,50 @@ paths:
                   $ref: '#/components/schemas/Notification'
         '401':
           $ref: '#/components/responses/Unauthorized'
+  /notifications/devices:
+    post:
+      tags: [Notifications]
+      summary: Register the authenticated user's push notification device
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterPushDeviceRequest'
+      responses:
+        '201':
+          description: Device registered for push notifications
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [registered, id]
+                properties:
+                  registered:
+                    type: boolean
+                  id:
+                    type: string
+                    format: uuid
+    delete:
+      tags: [Notifications]
+      summary: Unregister the authenticated user's push notification device
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterPushDeviceRequest'
+      responses:
+        '200':
+          description: Device unregistered
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [unregistered]
+                properties:
+                  unregistered:
+                    type: boolean
   /notifications/{notificationId}/read:
     patch:
       tags: [Notifications]
@@ -1017,6 +1061,18 @@ components:
         createdAt:
           type: string
           format: date-time
+    RegisterPushDeviceRequest:
+      type: object
+      additionalProperties: false
+      required: [token, platform]
+      properties:
+        token:
+          type: string
+          minLength: 1
+          maxLength: 4096
+        platform:
+          type: string
+          enum: [android, ios]
           minLength: 3
           maxLength: 3
           pattern: '^[A-Z]{3}$'

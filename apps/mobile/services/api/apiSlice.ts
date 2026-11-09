@@ -23,12 +23,13 @@ import type {
   SettlementCreateDTO,
   GroupActivityDTO,
   SimplifiedDebtDTO,
+  NotificationDTO,
 } from './types';
 
 export const apiSlice = createApi({
   reducerPath: 'api',
   baseQuery: axiosBaseQuery({ baseUrl: API_BASE_URL }),
-  tagTypes: ['Auth', 'Groups', 'Expenses', 'Balances', 'Settlements', 'Dashboard', 'GroupActivities'],
+  tagTypes: ['Auth', 'Groups', 'Expenses', 'Balances', 'Settlements', 'Dashboard', 'GroupActivities', 'Notifications'],
   endpoints: builder => ({
     register: builder.mutation<RegistrationResponseDTO, RegisterDTO>({
       query: creds => ({ url: '/auth/register', method: 'POST', data: creds }),
@@ -105,6 +106,7 @@ export const apiSlice = createApi({
       invalidatesTags: (_result, _error, { groupId }) => [
         'Groups',
         'Dashboard',
+        'Notifications',
         { type: 'Expenses', id: groupId },
         { type: 'Balances', id: groupId },
         { type: 'GroupActivities', id: groupId },
@@ -119,6 +121,7 @@ export const apiSlice = createApi({
       invalidatesTags: (_result, _error, { groupId }) => [
         'Groups',
         'Dashboard',
+        'Notifications',
         { type: 'Expenses', id: groupId },
         { type: 'Balances', id: groupId },
         { type: 'GroupActivities', id: groupId },
@@ -149,10 +152,37 @@ export const apiSlice = createApi({
       query: () => ({ url: '/activity' }),
       providesTags: ['Expenses'],
     }),
+    getNotifications: builder.query<NotificationDTO[], { page?: number; pageSize?: number }>({
+      query: ({ page = 1, pageSize = 100 } = {}) => ({
+        url: '/notifications',
+        params: { page, pageSize },
+      }),
+      providesTags: ['Notifications'],
+    }),
+    markNotificationRead: builder.mutation<{ id: string; read: boolean }, string>({
+      query: notificationId => ({
+        url: `/notifications/${notificationId}/read`,
+        method: 'PATCH',
+      }),
+      invalidatesTags: ['Notifications'],
+    }),
+    registerPushDevice: builder.mutation<
+      { registered: boolean; id: string },
+      { token: string; platform: 'android' | 'ios' }
+    >({
+      query: body => ({ url: '/notifications/devices', method: 'POST', data: body }),
+    }),
+    unregisterPushDevice: builder.mutation<
+      { unregistered: boolean },
+      { token: string; platform: 'android' | 'ios' }
+    >({
+      query: body => ({ url: '/notifications/devices', method: 'DELETE', data: body }),
+    }),
     createSettlement: builder.mutation<SettlementDTO, { payload: SettlementCreateDTO; idempotencyKey?: string }>({
       query: ({ payload, idempotencyKey }) => ({ url: '/settlements', method: 'POST', data: payload, idempotencyKey }),
       invalidatesTags: (_result, _error, { payload }) => [
         'Settlements',
+        'Notifications',
         'Groups',
         { type: 'Balances', id: payload.groupId },
         { type: 'GroupActivities', id: payload.groupId },
@@ -183,5 +213,9 @@ export const {
   useGetGroupBalancesQuery,
   useGetDashboardSummaryQuery,
   useGetActivityQuery,
+  useGetNotificationsQuery,
+  useMarkNotificationReadMutation,
+  useRegisterPushDeviceMutation,
+  useUnregisterPushDeviceMutation,
   useCreateSettlementMutation,
 } = apiSlice;

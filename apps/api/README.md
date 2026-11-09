@@ -30,6 +30,27 @@ verification emails require all three settings. Group invitation emails require
 code is still created and returned in the app so it can be shared manually.
 Restart or redeploy the API after changing its environment.
 
+## Push notifications
+
+The app stores notification inbox entries for group expense and settlement
+updates. Mobile push delivery uses Firebase Cloud Messaging (FCM):
+
+- Add the Firebase Android app's `google-services.json` to
+  `apps/mobile/android/app/`.
+- Add the Firebase iOS app's `GoogleService-Info.plist` to the iOS app target,
+  enable the Push Notifications capability, and configure APNs in Firebase.
+- Run `pnpm install` and `cd apps/mobile/ios && pod install` after installing
+  the mobile Firebase packages.
+- Configure Firebase Admin credentials for the API runtime using Application
+  Default Credentials or `GOOGLE_APPLICATION_CREDENTIALS`. Keep service-account
+  credentials out of the repository.
+- Apply the push-token migration with
+  `pnpm --filter @money-split/api exec prisma migrate deploy`.
+
+The mobile app asks permission before registering its device. Until both the
+mobile Firebase app files and API Firebase Admin credentials are configured,
+notification inbox entries still work; push delivery is unavailable.
+
 DB commands (root):
 
 ```bash

@@ -1,7 +1,14 @@
 import React from 'react';
-import { Alert, View, Text, StyleSheet, Pressable } from 'react-native';
+import { Alert, Platform, View, Text, StyleSheet, Pressable } from 'react-native';
 import { LogOut, Mail, UserRound } from 'lucide-react-native';
-import { apiSlice, useGetCurrentUserQuery, useLogoutMutation } from '../../services/api/apiSlice';
+import { getMessaging, getToken } from '@react-native-firebase/messaging';
+import { getApp } from '@react-native-firebase/app';
+import {
+  apiSlice,
+  useGetCurrentUserQuery,
+  useLogoutMutation,
+  useUnregisterPushDeviceMutation,
+} from '../../services/api/apiSlice';
 import ScreenHeader from '../../shared/components/ScreenHeader';
 import LoadingIndicator from '../../shared/components/LoadingIndicator';
 import EmptyState from '../../shared/components/EmptyState';
@@ -15,9 +22,18 @@ export default function ProfileScreen() {
   const refreshToken = useAppSelector(state => state.auth.refreshToken);
   const { data: user, isLoading, isError } = useGetCurrentUserQuery();
   const [logout, { isLoading: isLoggingOut }] = useLogoutMutation();
+  const [unregisterPushDevice] = useUnregisterPushDeviceMutation();
 
   const handleLogout = async () => {
     let storageFailed = false;
+    if (Platform.OS === 'ios' || Platform.OS === 'android') {
+      try {
+        const deviceToken = await getToken(getMessaging(getApp()));
+        await unregisterPushDevice({ token: deviceToken, platform: Platform.OS }).unwrap();
+      } catch (error) {
+        console.warn('Could not unregister this device for push notifications.', error);
+      }
+    }
     const logoutRequest = logout({ refreshToken });
 
     try {
