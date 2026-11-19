@@ -1,22 +1,39 @@
+```yaml
 name: CI
 
-on: [push, pull_request]
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        project: [api]
+
     steps:
-      - uses: actions/checkout@v4
-      - name: Use Node.js
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
-      - name: Install
-        working-directory: ./apps/${{ matrix.project }}
-        run: npm ci
+          node-version: '20'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 8.8.0
+          run_install: false
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma Client
+        run: pnpm --filter @money-split/api prisma:generate
+
+      - name: Build API
+        run: pnpm --filter @money-split/api build
+
       - name: Run tests
-        working-directory: ./apps/${{ matrix.project }}
-        run: npm test --silent
+        run: pnpm --filter @money-split/api test -- --runInBand
