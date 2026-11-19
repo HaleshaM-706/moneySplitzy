@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo } from 'react';
-import { Platform } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import notifee, { AndroidImportance, AuthorizationStatus, EventType } from '@notifee/react-native';
 import {
   getInitialNotification,
@@ -34,6 +34,7 @@ import {
   useGetNotificationsQuery,
   useRegisterPushDeviceMutation,
   apiSlice,
+  notificationRefreshTags,
 } from '../../services/api/apiSlice';
 
 export type MainTabParamList = {
@@ -105,8 +106,12 @@ function MainTabs() {
     let unsubscribeTokenRefresh: (() => void) | undefined;
     let unsubscribeForegroundMessage: (() => void) | undefined;
     let unsubscribeNotificationOpened: (() => void) | undefined;
+    let unsubscribeAppState: { remove: () => void } | undefined;
+    const refreshNotificationRelatedApis = () => {
+      dispatch(apiSlice.util.invalidateTags([...notificationRefreshTags]));
+    };
     const openInbox = () => {
-      dispatch(apiSlice.util.invalidateTags(['Notifications']));
+      refreshNotificationRelatedApis();
       navigation.navigate('Main', { screen: 'Notifications' });
     };
     const unsubscribeNotifeePressed = notifee.onForegroundEvent(({ type }) => {
@@ -128,17 +133,17 @@ function MainTabs() {
             importance: AndroidImportance.HIGH,
           });
         }
+        if (!active) return;
         const permission = await notifee.requestPermission();
-        if (permission.authorizationStatus < AuthorizationStatus.AUTHORIZED) return;
+        if (!active || permission.authorizationStatus < AuthorizationStatus.AUTHORIZED) return;
 
-        await registerToken(await getToken(firebaseMessaging));
         unsubscribeTokenRefresh = onTokenRefresh(firebaseMessaging, deviceToken => {
           registerToken(deviceToken).catch(error => {
             console.warn('Could not update the push notification token.', error);
           });
         });
         unsubscribeForegroundMessage = onMessage(firebaseMessaging, async message => {
-          dispatch(apiSlice.util.invalidateTags(['Notifications']));
+          refreshNotificationRelatedApis();
           try {
             await notifee.displayNotification({
               title: message.notification?.title ?? 'Money Splitzy',
@@ -154,8 +159,28 @@ function MainTabs() {
           }
         });
         unsubscribeNotificationOpened = onNotificationOpenedApp(firebaseMessaging, openInbox);
-        const initialMessage = await getInitialNotification(firebaseMessaging);
-        if (initialMessage) openInbox();
+        getInitialNotification(firebaseMessaging)
+          .then(initialMessage => {
+            if (active && initialMessage) openInbox();
+          })
+          .catch(error => {
+            console.warn('Could not inspect the initial push notification.', error);
+          });
+
+        unsubscribeAppState = AppState.addEventListener('change', nextState => {
+          if (nextState !== 'active') return;
+          refreshNotificationRelatedApis();
+          getToken(firebaseMessaging)
+            .then(registerToken)
+            .catch(error => {
+              console.warn('Could not register this device for push notifications.', error);
+            });
+        });
+        try {
+          await registerToken(await getToken(firebaseMessaging));
+        } catch (error) {
+          console.warn('Could not register this device for push notifications.', error);
+        }
       } catch (error) {
         console.warn('Push notification setup failed. Check Firebase app configuration.', error);
       }
@@ -170,6 +195,7 @@ function MainTabs() {
       unsubscribeTokenRefresh?.();
       unsubscribeForegroundMessage?.();
       unsubscribeNotificationOpened?.();
+      unsubscribeAppState?.remove();
       unsubscribeNotifeePressed();
     };
   }, [dispatch, navigation, registerPushDevice, token]);

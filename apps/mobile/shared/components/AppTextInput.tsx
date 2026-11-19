@@ -14,7 +14,9 @@ export default function AppTextInput({ icon: Icon, style, ...props }: Props) {
       <TextInput
         style={[styles.input, style]}
         placeholderTextColor="#98A39C"
-        selectionColor={colors.primary}
+        selectionColor={colors.primaryDark}
+        cursorColor={colors.primaryDark}
+        underlineColorAndroid="transparent"
         {...props}
       />
     </View>

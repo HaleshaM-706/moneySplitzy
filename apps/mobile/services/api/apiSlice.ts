@@ -26,6 +26,16 @@ import type {
   NotificationDTO,
 } from './types';
 
+export const notificationRefreshTags = [
+  'Notifications',
+  'Groups',
+  'Expenses',
+  'Balances',
+  'Settlements',
+  'Dashboard',
+  'GroupActivities',
+] as const;
+
 export const apiSlice = createApi({
   reducerPath: 'api',
   baseQuery: axiosBaseQuery({ baseUrl: API_BASE_URL }),
@@ -184,6 +194,7 @@ export const apiSlice = createApi({
         'Settlements',
         'Notifications',
         'Groups',
+        'Dashboard',
         { type: 'Balances', id: payload.groupId },
         { type: 'GroupActivities', id: payload.groupId },
       ],

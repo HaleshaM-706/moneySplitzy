@@ -9,6 +9,7 @@ export default function BackButton({ onPress }: { onPress: () => void }) {
       accessibilityRole="button"
       accessibilityLabel="Go back"
       onPress={onPress}
+      hitSlop={8}
       style={({ pressed }) => [styles.button, pressed && styles.pressed]}
     >
       <ArrowLeft size={18} color={colors.primaryDark} strokeWidth={2.2} />
@@ -18,7 +19,14 @@ export default function BackButton({ onPress }: { onPress: () => void }) {
 }
 
 const styles = StyleSheet.create({
-  button: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', marginBottom: 18, paddingVertical: 4 },
+  button: {
+    alignSelf: 'flex-start',
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 18,
+    paddingHorizontal: 8,
+  },
   pressed: { opacity: 0.65 },
   text: { color: colors.primaryDark, fontSize: 14, fontWeight: '700', marginLeft: 7 },
 });

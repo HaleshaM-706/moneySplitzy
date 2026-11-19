@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { BarChart3, CircleDollarSign, Clock3, MailPlus, Pencil, Plus, Receipt, Trash2, Users, Wallet } from 'lucide-react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
@@ -131,17 +131,42 @@ export default function GroupDetailsScreen({ route, navigation }: Props) {
   const [settlingDebtKey, setSettlingDebtKey] = useState<string | null>(null);
   const scrollViewRef = useRef<React.ElementRef<typeof ScrollView>>(null);
   const scrollToOverviewRef = useRef(false);
-  const { data: group, isLoading: groupLoading, isError: groupError, refetch: refetchGroup } = useGetGroupDetailsQuery(groupId);
-  const { data: expenses = [], isLoading: expensesLoading, isError: expensesError, refetch: refetchExpenses } = useGetGroupExpensesQuery(groupId);
-  const { data: activities = [], isLoading: activitiesLoading, isError: activitiesError, refetch: refetchActivities } = useGetGroupActivitiesQuery(groupId);
+  const {
+    data: group,
+    isLoading: groupLoading,
+    isFetching: groupFetching,
+    isError: groupError,
+    refetch: refetchGroup,
+  } = useGetGroupDetailsQuery(groupId);
+  const {
+    data: expenses = [],
+    isLoading: expensesLoading,
+    isFetching: expensesFetching,
+    isError: expensesError,
+    refetch: refetchExpenses,
+  } = useGetGroupExpensesQuery(groupId);
+  const {
+    data: activities = [],
+    isLoading: activitiesLoading,
+    isFetching: activitiesFetching,
+    isError: activitiesError,
+    refetch: refetchActivities,
+  } = useGetGroupActivitiesQuery(groupId);
   const {
     data: balances = [],
     isLoading: balancesLoading,
+    isFetching: balancesFetching,
     isError: balancesError,
     refetch: refetchBalances,
   } = useGetGroupBalancesQuery({ groupId });
   const { data: user } = useGetCurrentUserQuery();
-  const { data: debts = [], isLoading: debtsLoading, isError: debtsError, refetch: refetchDebts } =
+  const {
+    data: debts = [],
+    isLoading: debtsLoading,
+    isFetching: debtsFetching,
+    isError: debtsError,
+    refetch: refetchDebts,
+  } =
     useGetSimplifiedDebtsQuery(groupId, { skip: !showSettleUp });
   const [createSettlement] = useCreateSettlementMutation();
   const [deleteExpense, { isLoading: isDeletingExpense, originalArgs: deletingExpenseArgs }] = useDeleteExpenseMutation();
@@ -172,6 +197,27 @@ export default function GroupDetailsScreen({ route, navigation }: Props) {
     member => member.user.id === user?.id && member.role === 'ADMIN',
   ) ?? false;
   const totalMinor = expenses.reduce((total, expense) => total + expense.totalMinor, 0);
+  const navigateToGroups = () => {
+    navigation.navigate('Main', { screen: 'Groups' });
+  };
+  const handleBack = () => {
+    console.info('[GroupDetails] Back button pressed', { groupId });
+    navigateToGroups();
+  };
+  const refreshGroup = async () => {
+    await Promise.all([
+      refetchGroup(),
+      refetchExpenses(),
+      refetchActivities(),
+      refetchBalances(),
+      ...(showSettleUp ? [refetchDebts()] : []),
+    ]);
+  };
+  const refreshing = groupFetching
+    || expensesFetching
+    || activitiesFetching
+    || balancesFetching
+    || (showSettleUp && debtsFetching);
   const showBalances = () => {
     scrollToOverviewRef.current = true;
     setShowSettleUp(false);
@@ -225,7 +271,7 @@ export default function GroupDetailsScreen({ route, navigation }: Props) {
   if (groupError || !group) {
     return (
       <View style={styles.state}>
-        <BackButton onPress={() => navigation.goBack()} />
+        <BackButton onPress={handleBack} />
         <EmptyState message="Could not load this group. Check your connection and try again." />
         <Pressable onPress={refetchGroup} style={styles.retry}><Text style={styles.retryText}>Retry</Text></Pressable>
       </View>
@@ -266,10 +312,17 @@ export default function GroupDetailsScreen({ route, navigation }: Props) {
       style={styles.container}
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
+      refreshControl={(
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={refreshGroup}
+          tintColor={colors.primary}
+        />
+      )}
     >
       <View style={styles.topRow}>
-        <BackButton onPress={() => navigation.goBack()} />
-        <Pressable style={styles.switchButton} onPress={() => navigation.navigate('Main', { screen: 'Groups' })} accessibilityRole="button">
+        <BackButton onPress={handleBack} />
+        <Pressable style={styles.switchButton} onPress={navigateToGroups} accessibilityRole="button">
           <Users size={16} color={colors.primaryDark} />
           <Text style={styles.switchText}>My Groups</Text>
         </Pressable>
@@ -438,7 +491,7 @@ export default function GroupDetailsScreen({ route, navigation }: Props) {
           <SectionHeading title="Group expenses" action="" />
           <View style={styles.search}>
             <Receipt size={17} color={colors.muted} />
-            <TextInput value={search} onChangeText={setSearch} placeholder="Search expenses" placeholderTextColor={colors.muted} style={styles.searchInput} />
+            <TextInput value={search} onChangeText={setSearch} placeholder="Search expenses" placeholderTextColor={colors.muted} selectionColor={colors.primaryDark} cursorColor={colors.primaryDark} style={styles.searchInput} />
           </View>
           <View style={styles.search}>
             <Clock3 size={17} color={colors.muted} />
@@ -447,6 +500,8 @@ export default function GroupDetailsScreen({ route, navigation }: Props) {
               onChangeText={setExpenseDateFilter}
               placeholder="Filter date (YYYY-MM-DD)"
               placeholderTextColor={colors.muted}
+              selectionColor={colors.primaryDark}
+              cursorColor={colors.primaryDark}
               style={styles.searchInput}
               maxLength={10}
               accessibilityLabel="Filter expenses by date"

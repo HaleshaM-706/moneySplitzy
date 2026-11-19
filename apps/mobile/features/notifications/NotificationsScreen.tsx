@@ -15,11 +15,14 @@ import { useNavigation } from '@react-navigation/native';
 import {
   useGetNotificationsQuery,
   useMarkNotificationReadMutation,
+  apiSlice,
+  notificationRefreshTags,
 } from '../../services/api/apiSlice';
 import type { MainTabParamList, RootStackParamList } from '../../app/navigation/AppNavigator';
 import EmptyState from '../../shared/components/EmptyState';
 import LoadingIndicator from '../../shared/components/LoadingIndicator';
 import ScreenHeader from '../../shared/components/ScreenHeader';
+import { useAppDispatch } from '../../shared/hooks/useAppHooks';
 import { colors, spacing } from '../../shared/theme';
 
 type TabNavigation = BottomTabNavigationProp<MainTabParamList, 'Notifications'>;
@@ -27,11 +30,11 @@ type TabNavigation = BottomTabNavigationProp<MainTabParamList, 'Notifications'>;
 export default function NotificationsScreen() {
   const navigation = useNavigation<TabNavigation>();
   const rootNavigation = navigation.getParent<NativeStackNavigationProp<RootStackParamList>>();
+  const dispatch = useAppDispatch();
   const {
     data: notifications = [],
     isLoading,
     isError,
-    refetch,
     isFetching,
   } = useGetNotificationsQuery({ page: 1, pageSize: 100 });
   const [markRead] = useMarkNotificationReadMutation();
@@ -61,8 +64,8 @@ export default function NotificationsScreen() {
       refreshControl={(
         <RefreshControl
           refreshing={isFetching && !isLoading}
-          onRefresh={async () => {
-            await refetch();
+          onRefresh={() => {
+            dispatch(apiSlice.util.invalidateTags([...notificationRefreshTags]));
           }}
           tintColor={colors.primary}
         />
