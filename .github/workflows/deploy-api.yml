@@ -64,6 +64,6 @@ jobs:
           AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
       
       - name: Verify S3 upload
-          run: |
-            aws s3 ls s3://moneysplitzy-api-deploy/api/ \
-              --region ap-south-1
+        run: |
+          aws s3 ls s3://moneysplitzy-api-deploy/api/ \
+            --region ap-south-1
