@@ -32,6 +32,17 @@ jobs:
 
       - name: Build API
         run: pnpm --filter @money-split/api build
+      
+      - name: Create API env
+        run: |
+          cat > apps/api/.env <<EOF
+          DATABASE_URL=${{ secrets.DATABASE_URL }}
+          DIRECT_URL=${{ secrets.DIRECT_URL }}
+          RESEND_API_KEY=${{ secrets.RESEND_API_KEY }}
+          JWT_SECRET=${{ secrets.JWT_SECRET }}
+          EMAIL_FROM=${{ secrets.EMAIL_FROM }}
+          API_PUBLIC_URL=${{ secrets.API_PUBLIC_URL }}
+          EOF
 
       - name: Package API
         run: |
