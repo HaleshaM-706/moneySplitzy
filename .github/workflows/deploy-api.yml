@@ -52,6 +52,7 @@ jobs:
           cp -r apps/api/prisma release/
           cp package.json release/
           cp pnpm-lock.yaml release/
+          tar -czf money-splitzy-api.tar.gz -C release .
 
       - name: Upload to S3
         run: |
