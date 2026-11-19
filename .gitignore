@@ -1,7 +1,8 @@
 node_modules/
 dist/
 .env
-.env.local
+.env.*
+!.env.example
 apps/mobile/android/app/google-services.json
 apps/mobile/ios/mobile/GoogleService-Info.plist
 firebase-service-account.json
