@@ -1,6 +1,6 @@
 node_modules/
 dist/
-# .env
+.env
 .env.local
 apps/mobile/android/app/google-services.json
 apps/mobile/ios/mobile/GoogleService-Info.plist
